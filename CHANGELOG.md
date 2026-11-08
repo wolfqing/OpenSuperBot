@@ -7,6 +7,11 @@ names.
 
 ## [Unreleased]
 
+### Changed
+
+- The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
+  computer's live screen in the panel. The conversation is the built-in scripted demo.
+
 ## [0.5.0] - 2026-11-08
 
 Each teammate can run on its own AI: Claude, OpenAI, xAI, Gemini, MiniMax and other OpenAI-compatible
