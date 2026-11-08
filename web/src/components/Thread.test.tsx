@@ -72,7 +72,7 @@ describe('Thread', () => {
     render(<Thread conversation={group} roster={roster} messages={groupMessages} thinking={false} onSend={() => {}} onDecide={() => {}} />)
     expect(screen.getByText('Scout')).toBeInTheDocument()
     expect(screen.getByText('Ticker')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Message Offsite crew')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Message Offsite crew, or type @ to ask someone directly')).toBeInTheDocument()
   })
 
   it('does not label the speaker in a one-to-one thread', () => {
@@ -143,6 +143,81 @@ describe('Thread', () => {
     expect(onSend).not.toHaveBeenCalled()
     fireEvent.keyDown(box, { key: 'Enter' })
     expect(onSend).toHaveBeenCalledWith('nihao')
+  })
+
+  describe('@ in a group', () => {
+    const groupBox = () => screen.getByPlaceholderText('Message Offsite crew, or type @ to ask someone directly')
+    const renderGroup = (onSend = vi.fn()) => {
+      render(<Thread conversation={group} roster={roster} messages={[]} thinking={false} onSend={onSend} onDecide={() => {}} />)
+      return onSend
+    }
+
+    it('lists the members, narrows them as you type, and sends the one you picked', async () => {
+      const onSend = renderGroup()
+      await userEvent.type(groupBox(), '@')
+      expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['🔎Scout@researcher', '📈Ticker@market-watch'])
+      await userEvent.type(groupBox(), 'tic')
+      expect(screen.getAllByRole('option')).toHaveLength(1)
+      await userEvent.type(groupBox(), '{Enter}')
+      expect(groupBox()).toHaveValue('@Ticker ')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(onSend).not.toHaveBeenCalled()
+      await userEvent.type(groupBox(), 'check prices{Enter}')
+      expect(onSend).toHaveBeenCalledWith('@Ticker check prices', ['market-watch'])
+    })
+
+    it('moves through the list with the arrow keys and picks with Tab or a click', async () => {
+      const onSend = renderGroup()
+      await userEvent.type(groupBox(), 'ask @')
+      await userEvent.keyboard('{ArrowDown}')
+      expect(screen.getByRole('option', { selected: true })).toHaveTextContent('Ticker')
+      await userEvent.keyboard('{Tab}')
+      await userEvent.type(groupBox(), 'and @sc')
+      fireEvent.mouseDown(screen.getByRole('option', { name: /Scout/ }))
+      expect(groupBox()).toHaveValue('ask @Ticker and @Scout ')
+      await userEvent.type(groupBox(), '{Enter}')
+      expect(onSend).toHaveBeenCalledWith('ask @Ticker and @Scout', ['market-watch', 'researcher'])
+    })
+
+    it('closes the list on Escape, so Enter sends the text as typed to the whole group', async () => {
+      const onSend = renderGroup()
+      await userEvent.type(groupBox(), 'mail me @')
+      await userEvent.keyboard('{Escape}')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      await userEvent.keyboard('{Enter}')
+      expect(onSend).toHaveBeenCalledWith('mail me @')
+    })
+
+    it('opens again for a new @ after the dismissed one is deleted', async () => {
+      renderGroup()
+      await userEvent.type(groupBox(), '@')
+      await userEvent.keyboard('{Escape}')
+      await userEvent.type(groupBox(), '{Backspace}@')
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    it('drops a pick whose name was deleted again', async () => {
+      const onSend = renderGroup()
+      await userEvent.type(groupBox(), '@sc{Enter}')
+      await userEvent.clear(groupBox())
+      await userEvent.type(groupBox(), 'where are we?{Enter}')
+      expect(onSend).toHaveBeenCalledWith('where are we?')
+    })
+
+    it('does not pick while an input method is still composing', () => {
+      const onSend = renderGroup()
+      fireEvent.change(groupBox(), { target: { value: '@sc', selectionStart: 3 } })
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+      fireEvent.keyDown(groupBox(), { key: 'Enter', isComposing: true })
+      expect(groupBox()).toHaveValue('@sc')
+      expect(onSend).not.toHaveBeenCalled()
+    })
+
+    it('never opens in a one-to-one thread', async () => {
+      render(<Thread conversation={dm} roster={roster} messages={[]} thinking={false} onSend={() => {}} onDecide={() => {}} />)
+      await userEvent.type(screen.getByPlaceholderText('Message Scout'), '@')
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
   })
 
   it('keeps Shift+Enter for a new line', async () => {

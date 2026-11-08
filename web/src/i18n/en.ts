@@ -45,6 +45,8 @@ export const en = {
   'thread.yesterday': 'Yesterday',
   'thread.openComputer': 'Open its computer',
   'thread.placeholder': 'Message {name}',
+  'thread.placeholderGroup': 'Message {name}, or type @ to ask someone directly',
+  'thread.mentionList': 'Teammates to ask',
   'thread.stop': 'Stop',
   'thread.stopTitle': 'Stop what it is doing',
   'thread.send': 'Send',

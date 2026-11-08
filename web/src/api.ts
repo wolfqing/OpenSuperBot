@@ -74,8 +74,9 @@ export const fetchConversations = () => getJson<Conversation[]>('/api/conversati
 export const fetchMessages = (threadId: string) => getJson<Message[]>(`/api/threads/${encodeURIComponent(threadId)}/messages`)
 export const fetchComputer = (botId: string) => getJson<ComputerInfo>(`/api/bots/${encodeURIComponent(botId)}/computer`)
 
-export async function sendMessage(threadId: string, text: string): Promise<void> {
-  await send('POST', `/api/threads/${encodeURIComponent(threadId)}/messages`, { text })
+/** mentions：群里点名的同事 id，只叫他们作答；不传就是整个群 */
+export async function sendMessage(threadId: string, text: string, mentions?: string[]): Promise<void> {
+  await send('POST', `/api/threads/${encodeURIComponent(threadId)}/messages`, mentions?.length ? { text, mentions } : { text })
 }
 
 export async function stopThread(threadId: string): Promise<void> {
