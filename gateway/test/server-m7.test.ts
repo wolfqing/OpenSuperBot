@@ -241,6 +241,7 @@ describe('/api/setup', () => {
     const s = setup({ docker: true })
     expect(await get(s)).toEqual({
       needsSetup: true,
+      chiefId: 'chief',
       demo: false,
       computers: {
         kind: 'local', choice: 'auto',

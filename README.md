@@ -137,7 +137,12 @@ On Windows, in PowerShell: `$env:OPENSUPERBOT_MODEL = 'stub'; pnpm dev`.
 The gateway prints a sign-in link — `http://localhost:5173/auth?token=…`. Open it once per browser; nothing
 reaches the gateway without that token.
 
-Point it at a real model (anything OpenAI-compatible — xAI, Kimi, DeepSeek, a local Ollama):
+For a real model, run plain `pnpm dev` with no model variables: the first page opens on a setup wizard. Pick a
+service, paste its key, test it and pick a model; the key is saved on this machine and nothing needs exporting.
+It also checks the browser, Docker and the sandbox, and has a demo-mode button on every early step.
+
+Or set it with environment variables, which skips the wizard (anything OpenAI-compatible — xAI, Kimi, DeepSeek,
+a local Ollama):
 
 ```bash
 OPENSUPERBOT_API_KEY=sk-… OPENSUPERBOT_MODEL=grok-4.7 pnpm dev

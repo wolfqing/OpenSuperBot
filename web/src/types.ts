@@ -228,6 +228,28 @@ export type BrowserStatus =
   | { state: 'downloading'; item: string | null; percent: number | null; totalMiB: number | null }
   | { state: 'failed'; error: string }
 
+/** 自动选电脑时为什么落在这一种（网关的 BackendWhy） */
+export type BackendWhy = 'chosen' | 'docker_running' | 'docker_not_running' | 'docker_image_missing' | 'no_local_mode'
+
+/** /api/setup：要不要出首次启动向导，以及同事的电脑有什么可用 */
+export type SetupInfo = {
+  needsSetup: boolean
+  /** 向导最后一步把人领进它的对话；老网关不给就当 chief */
+  chiefId?: string
+  demo: boolean
+  computers: {
+    kind: 'local' | 'docker'
+    choice: 'auto' | 'docker' | 'local'
+    why?: BackendWhy
+    reason?: string
+    docker: { reachable: boolean; imageReady: boolean | null }
+    browser: BrowserStatus
+    download: { approxMB: number; onDiskMB: number }
+    browserMirror: { current: string; suggested: { url: string; owner: string } | null }
+    sandbox: { available: boolean; why?: string; whyCode?: SandboxMissing }
+  }
+}
+
 /** 模型接口的说法：chat = OpenAI 兼容；anthropic = Claude 原生；responses = OpenAI 的 Responses */
 export type LlmApi = 'chat' | 'anthropic' | 'responses'
 

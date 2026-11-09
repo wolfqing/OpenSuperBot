@@ -7,6 +7,21 @@ names.
 
 ## [Unreleased]
 
+### Added
+
+- **A first-run wizard.** A fresh install opens on a few short steps instead of an empty workspace: pick the
+  language, pick an AI service from cards (each with a link to where its key is made), paste the key and test it,
+  then pick a model from the ones the service offers. A failed test says what went wrong and what to try next.
+  It then shows what your teammates' computer has to work with (the browser it found, or a download with its size,
+  progress and a mirror in China; Docker; the sandbox for commands) and ends in Chief's thread with three example
+  tasks to try. Every step before the computer check can switch to demo mode instead. Installs set up with
+  environment variables never see it.
+
+### Fixed
+
+- In demo mode, a link followed by Chinese punctuation is opened without the punctuation, and Chinese requests to
+  send, email or reply are held for approval like English ones.
+
 ### Security
 
 - **Only turns you start can change a teammate's standing setup.** Saving or forgetting a rule and creating or

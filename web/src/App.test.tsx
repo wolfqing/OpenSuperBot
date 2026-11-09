@@ -26,15 +26,20 @@ function mockGateway(opts: {
   computerGate?: Promise<void>
   /** 设置里存的界面语言；不给 = 网关没有设置路由（老网关） */
   language?: string
+  /** /api/setup 的回答；不给 = 老网关，没有向导 */
+  setup?: unknown
 } = {}) {
   const calls: string[] = []
-  const fetchMock = vi.fn(async (input: string | URL | Request) => {
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     calls.push(url)
+    if (init?.method === 'POST') calls.push(`POST ${url} ${String(init.body ?? '')}`)
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
     if (url === '/api/session') return json({ ok: opts.session === undefined }, opts.session ?? 200)
     if (url === '/api/conversations') return json(opts.conversations ?? [conversation({})])
     if (url === '/api/bots') return json([])
+    if (url === '/api/setup' && opts.setup) return json(opts.setup)
+    if (url === '/api/settings' && opts.setup && opts.language === undefined) return json({})
     if (url === '/api/settings' && opts.language !== undefined) {
       return opts.session === 401 ? json({ error: 'sign in' }, 401) : json({ values: { language: opts.language } })
     }
@@ -249,5 +254,38 @@ describe('App', () => {
     })
     await act(async () => { gates['/api/threads/dm:researcher/messages']!([]) })
     await waitFor(() => expect(document.querySelector('.thread-scroll')!.textContent).toContain('final reply'))
+  })
+
+  it('opens the first-run wizard when the gateway asks for it, and lands in Chief’s thread with the example sent', async () => {
+    const calls = mockGateway({
+      conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })],
+      setup: {
+        needsSetup: true, chiefId: 'chief', demo: false,
+        computers: {
+          kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+          browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+          browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+        },
+      },
+    })
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+    expect(document.querySelector('.sidebar')).toBeNull()
+    await act(async () => { screen.getByRole('button', { name: 'Just look around (demo mode)' }).click() })
+    await act(async () => { (await screen.findByRole('button', { name: 'Continue' })).click() })
+    await act(async () => { screen.getByRole('button', { name: /Every morning at 9/ }).click() })
+    await waitFor(() => expect(document.querySelector('.sidebar')).not.toBeNull())
+    await waitFor(() => expect(calls).toContain(
+      `POST /api/threads/dm%3Achief/messages ${JSON.stringify({ text: 'Every morning at 9, give me a short summary of the tech news.' })}`,
+    ))
+    expect(document.querySelector('.thread-header')?.textContent).toContain('Chief')
+  })
+
+  it('skips the wizard once the gateway is set up', async () => {
+    mockGateway({ setup: { needsSetup: false, demo: false, computers: {} } })
+    render(<App />)
+    await screen.findAllByText('Scout')
+    await act(async () => {})
+    expect(screen.queryByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeNull()
   })
 })

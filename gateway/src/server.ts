@@ -236,7 +236,7 @@ export function createApp(deps: AppDeps): GatewayApp {
   if (deps.settings) mountSettings(app, { ...deps.settings, db, ...(deps.computers ? { runningKind: deps.computers.kind } : {}) })
   if (deps.settings) mountConnections(app, { ...deps.settings, db })
   if (deps.settings && deps.setup) {
-    mountSetup(app, { ...deps.settings, ...deps.setup, db, hub, ...(deps.computers ? { computers: deps.computers } : {}) })
+    mountSetup(app, { ...deps.settings, ...deps.setup, db, hub, chiefId, ...(deps.computers ? { computers: deps.computers } : {}) })
   }
 
   const botById = (id: string) => db.prepare('SELECT * FROM bots WHERE id = ?').get(id) as BotRow | undefined

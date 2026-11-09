@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ApiError, SignedOut, answerQuestion, checkSession, connectEvents, createBot, fetchBots, fetchComputer, fetchConnections, fetchConversations,
-  fetchLanguage, fetchMessages, fetchProviders, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
+  fetchLanguage, fetchMessages, fetchProviders, fetchSetup, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
   stopThread, updateRoutine,
 } from './api'
 import { BotModelChip, BotModelPicker } from './components/BotModelPicker'
 import { ComputerPanel } from './components/ComputerPanel'
 import { ModelsDialog } from './components/ModelsDialog'
 import { NewBotForm } from './components/NewBotForm'
+import { SetupWizard, type LanguageSetting } from './components/SetupWizard'
 import { Sidebar } from './components/Sidebar'
 import { Thread } from './components/Thread'
 import { I18nProvider, browserLanguages, pickLang, useT, type Lang } from './i18n'
 import { errorText } from './i18n/describe'
 import { applyHello, applyStatus, clearDone } from './presence'
-import type { BotStatus, ComputerInfo, ConnectionsState, Conversation, Message, ProviderPreset, RoutineAction } from './types'
+import type { BotStatus, BrowserStatus, ComputerInfo, ConnectionsState, Conversation, Message, ProviderPreset, RoutineAction, SetupInfo } from './types'
 
 /** 网关锁着：告诉人去哪拿登录链接，而不是一片空白。 */
 function SignIn() {
@@ -40,17 +41,21 @@ function withCode(text: string, name: string, code: string) {
  * 锁着的网关拿不到设置，登录页就按浏览器的语言。
  */
 export default function App() {
-  const [lang, setLang] = useState<Lang>(() => pickLang(undefined, browserLanguages()))
+  /** 设置里存的那一项（空 = 跟系统）；向导第一步改它 */
+  const [setting, setSetting] = useState<LanguageSetting>('')
+  const lang: Lang = useMemo(() => pickLang(setting, browserLanguages()), [setting])
   useEffect(() => {
     let live = true
-    void fetchLanguage().then((saved) => { if (live) setLang(pickLang(saved, browserLanguages())) })
+    void fetchLanguage().then((saved) => {
+      if (live && (saved === '' || saved === 'en' || saved === 'zh-CN')) setSetting(saved)
+    })
     return () => { live = false }
   }, [])
   useEffect(() => { document.documentElement.lang = lang }, [lang])
-  return <I18nProvider lang={lang}><Workspace /></I18nProvider>
+  return <I18nProvider lang={lang}><Workspace language={setting} onLanguage={setSetting} /></I18nProvider>
 }
 
-function Workspace() {
+function Workspace({ language, onLanguage }: { language: LanguageSetting; onLanguage: (next: LanguageSetting) => void }) {
   const t = useT()
   const [signedOut, setSignedOut] = useState<boolean | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -68,6 +73,10 @@ function Workspace() {
   /** 开着的是哪个窗口：「AI 模型」总表，或给某位同事选模型 */
   const [modelsOpen, setModelsOpen] = useState(false)
   const [pickerFor, setPickerFor] = useState<string | null>(null)
+  /** 首次启动向导：网关说要（needsSetup）才出；走完之前一直开着，哪怕中途已经存好了 key */
+  const [setup, setSetup] = useState<SetupInfo | null>(null)
+  const [wizard, setWizard] = useState(false)
+  const [setupBrowser, setSetupBrowser] = useState<BrowserStatus | null>(null)
 
   const selected = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,
@@ -157,7 +166,13 @@ function Workspace() {
     checkSession()
       .then((ok) => {
         setSignedOut(!ok)
-        if (ok) void resync()
+        if (!ok) return
+        void resync()
+        // 拿不到（老网关、网关出错）就不出向导：向导是锦上添花，不能把界面挡住
+        void fetchSetup().then((s) => {
+          setSetup(s)
+          if (s?.needsSetup) setWizard(true)
+        }).catch(() => {})
       })
       .catch(() => setSignedOut(false)) // 网关没起来：先显示空界面，WS 重连上以后会补拉
   }, [resync])
@@ -183,7 +198,11 @@ function Workspace() {
         setStatuses((s) => applyStatus(s, e.botId, e.state, watchingRef.current.includes(e.botId), posted))
         return
       }
-      if (e.type !== 'message') return // 向导之类的事件不归这里管；更新的网关发来不认识的也一样
+      if (e.type === 'setup.browser') {
+        setSetupBrowser(e.browser)
+        return
+      }
+      if (e.type !== 'message') return // 更新的网关发来不认识的事件，不归这里管
       if (e.message.sender !== 'user' && e.message.kind !== 'activity') postedRef.current.add(e.message.sender)
       // 就地更新的旧消息（activity 卡片收尾、审批 chip 翻转）不该顶掉更新的那条预览
       setConversations((cs) => cs.map((c) => (
@@ -291,7 +310,30 @@ function Workspace() {
     }
   }
 
+  /** 向导走完：进 Chief 的对话；点了示例任务就替人发出去 */
+  const finishSetup = (task?: string) => {
+    setWizard(false)
+    void loadLlms().catch(guard) // 向导里可能换了模型或切到了演示模式：标题栏的模型标签要跟上
+    const chief = `dm:${setup?.chiefId ?? 'chief'}`
+    setSelectedId(chief)
+    if (task) sendMessage(chief, task).catch(guard)
+  }
+
   if (signedOut) return <SignIn />
+  if (wizard && setup) {
+    return (
+      <SetupWizard
+        setup={setup}
+        providers={providers}
+        browser={setupBrowser ?? setup.computers.browser}
+        language={language}
+        onLanguage={onLanguage}
+        onBrowser={setSetupBrowser}
+        onConnections={setLlms}
+        onDone={finishSetup}
+      />
+    )
+  }
 
   const thinking = selected ? selected.members.some((id) => statuses[id] === 'thinking') : false
 

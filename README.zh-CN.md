@@ -122,7 +122,10 @@ Windows 上在 PowerShell 里：`$env:OPENSUPERBOT_MODEL = 'stub'; pnpm dev`。
 gateway 启动时会打印一条登录链接——`http://localhost:5173/auth?token=…`。每个浏览器打开一次即可；没有这个
 令牌，什么都连不上 gateway。
 
-接真模型（任何 OpenAI 兼容的都行：xAI、Kimi、DeepSeek、本地 Ollama）：
+接真模型：不设任何模型变量，直接 `pnpm dev`，第一次打开的页面就是设置向导——选一家服务、粘贴 key、测试、选模型；
+key 存在这台机器上，不用 export 什么。向导还会检查浏览器、Docker 和沙箱，前几步都能一键进演示模式。
+
+也可以用环境变量配，这样不出向导（任何 OpenAI 兼容的都行：xAI、Kimi、DeepSeek、本地 Ollama）：
 
 ```bash
 OPENSUPERBOT_API_KEY=sk-… OPENSUPERBOT_MODEL=grok-4.7 pnpm dev

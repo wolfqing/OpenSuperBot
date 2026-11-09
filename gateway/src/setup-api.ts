@@ -20,7 +20,7 @@ const DOWNLOAD = { approxMB: 190, onDiskMB: 370 }
 const CN_MIRROR = { url: 'https://cdn.npmmirror.com/binaries/playwright', owner: 'npmmirror.com' }
 const MAINLAND_ZONES = new Set(['Asia/Shanghai', 'Asia/Chongqing', 'Asia/Chungking', 'Asia/Harbin', 'Asia/Urumqi', 'Asia/Kashgar', 'PRC'])
 
-export function mountSetup(app: Hono, deps: SetupDeps & SettingsDeps & { db: Db; hub: Hub; computers?: ComputersInfo }): void {
+export function mountSetup(app: Hono, deps: SetupDeps & SettingsDeps & { db: Db; hub: Hub; computers?: ComputersInfo; /** 向导最后一步把人领进它的对话 */ chiefId: string }): void {
   const { db, env, startedWith, browser } = deps
   browser.onChange((status) => deps.hub.broadcast({ type: 'setup.browser', browser: status }))
 
@@ -33,6 +33,7 @@ export function mountSetup(app: Hono, deps: SetupDeps & SettingsDeps & { db: Db;
     const reason = deps.computers?.reason
     return c.json({
       needsSetup: needsSetup(env, db, startedWith.dataDir),
+      chiefId: deps.chiefId,
       demo: values.model === 'stub',
       computers: {
         kind: deps.computers?.kind ?? 'docker',

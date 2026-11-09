@@ -204,6 +204,20 @@ describe('stub model', () => {
     expect((routine.toolCalls[0]!.args as { cron: string }).cron).toBe('0 9 * * *')
   })
 
+  it('takes the first-run example tasks through a page, a routine and an approval, in English and Chinese', async () => {
+    const llm = createLLM(loadConfig({ OPENSUPERBOT_MODEL: 'stub' }))
+    const first = async (content: string) => (await llm.chat([{ role: 'user', content }], toolDefs)).toolCalls[0]!
+    // 和 web/src/i18n 里 setup.example.* 的文字一致
+    expect(await first('Open https://news.ycombinator.com and tell me the top three stories.'))
+      .toMatchObject({ name: 'browser_goto', args: { url: 'https://news.ycombinator.com' } })
+    expect(await first('打开 https://news.ycombinator.com，告诉我排在前三的是哪几条。'))
+      .toMatchObject({ name: 'browser_goto', args: { url: 'https://news.ycombinator.com' } })
+    expect((await first('Every morning at 9, give me a short summary of the tech news.')).name).toBe('create_routine')
+    expect((await first('每天早上 9 点给我一份科技新闻的简短摘要。')).name).toBe('create_routine')
+    expect((await first('Draft a thank-you email to alice@example.com and show it to me before it goes out.')).name).toBe('hold_for_approval')
+    expect((await first('给 alice@example.com 写一封感谢邮件，发出去之前先给我看。')).name).toBe('hold_for_approval')
+  })
+
   it('carries out an approved action instead of holding it again', async () => {
     const llm = createLLM(loadConfig({ OPENSUPERBOT_MODEL: 'stub' }))
     const approved = await llm.chat(
