@@ -3,12 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { insertMessage, openDb, upsertBot } from '../src/db.js'
+import type { PdfReader } from '../src/pdf-text.js'
 import {
   MAX_UPLOAD_BYTES, cleanName, computerPath, createUploads, decodeBase64Strict, describeUpload, sniffType,
 } from '../src/uploads.js'
+import { makePdf } from './fixtures/pdf-samples.js'
 import { b64, gif, html, jpeg, pdf, png, webp } from './fixtures/upload-samples.js'
 
-function setup(opts: { maxTotalBytes?: number; now?: () => number } = {}) {
+function setup(opts: { maxTotalBytes?: number; now?: () => number; pdf?: PdfReader } = {}) {
   const db = openDb(':memory:')
   upsertBot(db, { id: 'researcher', name: 'Scout', role: 'research', emoji: '🔎', soul_path: '' })
   const dataDir = mkdtempSync(join(tmpdir(), 'osb-uploads-'))
@@ -102,7 +104,7 @@ describe('storing an upload', () => {
     ['an image declared as text', { name: 'a.txt', mime: 'text/plain', data: b64(png()) }, 'type_mismatch', 415],
     ['a jpeg declared as png', { name: 'a.png', mime: 'image/png', data: b64(jpeg()) }, 'type_mismatch', 415],
     ['binary declared as text', { name: 'a.txt', mime: 'text/plain', data: b64(Buffer.from([0, 1, 2])) }, 'type_mismatch', 415],
-    ['a PDF, until the gateway can read them', { name: 'a.pdf', mime: 'application/pdf', data: b64(pdf()) }, 'type_not_allowed', 415],
+    ['a PDF declared as an image', { name: 'a.png', mime: 'image/png', data: b64(pdf()) }, 'type_mismatch', 415],
     ['broken base64', { name: 'a.png', mime: 'image/png', data: 'not base64!' }, 'bad_base64', 400],
     ['nothing at all', { name: 'a.txt', mime: 'text/plain', data: '' }, 'bad_base64', 400],
     ['a missing field', { name: 'a.txt', mime: 'text/plain' }, 'bad_request', 400],
@@ -263,5 +265,94 @@ describe('what a teammate is told about a file', () => {
 
   it('says so when the operator removed the file', () => {
     expect(describeUpload(md, { removed: true })).toBe('[file from your operator] notes.md. Your operator has removed it.')
+  })
+})
+
+describe('PDFs', () => {
+  const twoPages = () => makePdf(['Quarterly plan', 'Risks: none'])
+
+  it('are stored with their text beside them, so a teammate has something to read', async () => {
+    const { uploads, dataDir } = setup()
+    const saved = await uploads.save({ name: 'plan.pdf', mime: 'application/pdf', data: b64(twoPages()) })
+    if (!saved.ok) throw new Error(saved.code)
+    expect(saved.upload).toMatchObject({ mime: 'application/pdf', pages: 2, text_state: 'ok', size: twoPages().length })
+    expect(readdirSync(join(dataDir, 'uploads')).sort()).toEqual([saved.upload.id, `${saved.upload.id}.txt`])
+    expect(await uploads.text(saved.upload.id)).toBe('--- page 1 ---\nQuarterly plan\n\n--- page 2 ---\nRisks: none\n')
+    expect(uploads.view(saved.upload)).toEqual({
+      id: saved.upload.id, url: `/api/uploads/${saved.upload.id}`, name: 'plan.pdf', mime: 'application/pdf', size: twoPages().length,
+      pages: 2, text: 'ok',
+    })
+    if (process.platform !== 'win32') expect(statSync(join(dataDir, 'uploads', `${saved.upload.id}.txt`)).mode & 0o777).toBe(0o600)
+  })
+
+  it('are accepted without text when they are scans or cannot be parsed, and say which', async () => {
+    const { uploads, dataDir } = setup()
+    const scan = await uploads.save({ name: 'scan.pdf', mime: 'application/pdf', data: b64(makePdf([null])) })
+    const broken = await uploads.save({ name: 'broken.pdf', mime: 'application/pdf', data: b64(pdf()) })
+    if (!scan.ok || !broken.ok) throw new Error('refused')
+    expect(scan.upload).toMatchObject({ pages: 1, text_state: 'none' })
+    expect(broken.upload).toMatchObject({ pages: null, text_state: 'failed' })
+    expect(uploads.view(scan.upload)).toMatchObject({ pages: 1, text: 'none' })
+    expect(uploads.view(broken.upload)).toMatchObject({ text: 'failed' })
+    expect(uploads.view(broken.upload)).not.toHaveProperty('pages')
+    expect(await uploads.text(scan.upload.id)).toBeNull()
+    expect(readdirSync(join(dataDir, 'uploads')).sort()).toEqual([scan.upload.id, broken.upload.id].sort())
+  })
+
+  it('do not carry a text state when they are not PDFs', async () => {
+    const { uploads } = setup()
+    const saved = await uploads.save({ name: 'a.txt', mime: 'text/plain', data: b64(Buffer.from('a')) })
+    expect(saved.ok && saved.upload).toMatchObject({ pages: null, text_state: null })
+    expect(saved.ok && uploads.view(saved.upload)).not.toHaveProperty('text')
+    expect(saved.ok && await uploads.text(saved.upload.id)).toBeNull()
+  })
+
+  it('lose their text too when removed, when never attached, and when the folder is squared', async () => {
+    let clock = 1_000_000
+    const ctx = setup({ now: () => clock })
+    const save = async () => {
+      const saved = await ctx.uploads.save({ name: 'plan.pdf', mime: 'application/pdf', data: b64(twoPages()) })
+      if (!saved.ok) throw new Error(saved.code)
+      return saved.upload
+    }
+    const dir = join(ctx.dataDir, 'uploads')
+    const removed = await save()
+    await ctx.uploads.remove(removed.id)
+    expect(readdirSync(dir)).toEqual([])
+    expect(await ctx.uploads.text(removed.id)).toBeNull()
+
+    const kept = await save()
+    const message = insertMessage(ctx.db, { threadId: 'dm:researcher', sender: 'user', kind: 'attachment', payload: {} })
+    ctx.uploads.attach(kept.id, 'dm:researcher', message.id)
+    const orphan = await save()
+    writeFileSync(join(dir, `${'e'.repeat(32)}.txt`), 'text of an upload that is gone')
+    clock += 25 * 3_600_000
+    // 两条没挂上消息的记录都清掉：一条是没发出去的，一条是发之前就移除了的
+    expect(await ctx.uploads.sweep()).toEqual({ orphans: 2, strays: 1, missing: 0 })
+    expect(readdirSync(dir).sort()).toEqual([kept.id, `${kept.id}.txt`])
+    expect(ctx.uploads.get(orphan.id)).toBeNull()
+    expect(ctx.uploads.get(removed.id)).toBeNull()
+  })
+
+  it('can be given a reader of their own, and keep what it says', async () => {
+    const { uploads } = setup({ pdf: async () => ({ state: 'truncated', pages: 900, text: '[Only the first 200 of 900 pages are in this file.]\n\n--- page 1 ---\nx\n' }) })
+    const saved = await uploads.save({ name: 'long.pdf', mime: 'application/pdf', data: b64(twoPages()) })
+    expect(saved.ok && saved.upload).toMatchObject({ pages: 900, text_state: 'truncated' })
+  })
+
+  it('are described to a teammate with where the text is, or why there is none', () => {
+    const doc = { name: 'plan.pdf', mime: 'application/pdf', size: 1_300_000, width: null, height: null, pages: 12 }
+    const at = { path: 'uploads/1a2b3c4d-plan.pdf' }
+    const head = '[file from your operator] plan.pdf (PDF, 12 pages, 1.2 MB).'
+    expect(describeUpload({ ...doc, text_state: 'ok' }, at))
+      .toBe(`${head} It is in your folder as uploads/1a2b3c4d-plan.pdf, and its text as uploads/1a2b3c4d-plan.pdf.txt.`)
+    expect(describeUpload({ ...doc, text_state: 'truncated' }, at))
+      .toBe(`${head} It is in your folder as uploads/1a2b3c4d-plan.pdf, and the beginning of its text as uploads/1a2b3c4d-plan.pdf.txt.`)
+    expect(describeUpload({ ...doc, text_state: 'none' }, at))
+      .toBe(`${head} It is in your folder as uploads/1a2b3c4d-plan.pdf. It has no text to read; it is probably a scan.`)
+    expect(describeUpload({ ...doc, pages: null, text_state: 'failed' }, at))
+      .toBe('[file from your operator] plan.pdf (PDF, 1.2 MB). It is in your folder as uploads/1a2b3c4d-plan.pdf. Its text could not be extracted.')
+    expect(describeUpload({ ...doc, pages: 1, text_state: 'ok' }, {}))
+      .toBe('[file from your operator] plan.pdf (PDF, 1 page, 1.2 MB). It is not on your computer.')
   })
 })

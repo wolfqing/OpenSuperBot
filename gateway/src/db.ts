@@ -235,6 +235,12 @@ const MIGRATIONS: Migration[] = [
       PRIMARY KEY (upload_id, bot_id)
     );
   `),
+  // v9：PDF 的页数，和它的文字抽出来了没有（ok / truncated / none / failed）；别的文件这两列是空的
+  (db) => {
+    const have = new Set((db.pragma('table_info(uploads)') as { name: string }[]).map((c) => c.name))
+    if (!have.has('pages')) db.exec('ALTER TABLE uploads ADD COLUMN pages INTEGER')
+    if (!have.has('text_state')) db.exec('ALTER TABLE uploads ADD COLUMN text_state TEXT')
+  },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

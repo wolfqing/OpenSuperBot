@@ -57,7 +57,7 @@ export function mountUploads(app: Hono, deps: { uploads: Uploads | null; onRemov
     if (!bytes) return c.json({ error: 'this file was removed' }, 410)
     const image = isImage(upload.mime)
     return c.body(new Uint8Array(bytes), 200, {
-      'Content-Type': image ? upload.mime : `${upload.mime}; charset=utf-8`,
+      'Content-Type': upload.mime.startsWith('text/') ? `${upload.mime}; charset=utf-8` : upload.mime,
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'; sandbox",
       'Content-Disposition': `${image ? 'inline' : 'attachment'}; filename*=UTF-8''${headerName(upload.name)}`,

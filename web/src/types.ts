@@ -75,7 +75,13 @@ export type LoginPayload = { site: string; why?: string }
 /** webhook 带来的东西，网关已排好版、截过长 */
 export type WebhookPayload = { routineId: number; name: string; body: string }
 /** 操作者发给同事的文件；deleted = 之后被移除了，线程里只剩名字 */
-export type AttachmentPayload = { id: string; url: string; name: string; mime: string; size: number; width?: number; height?: number; deleted?: boolean }
+export type AttachmentPayload = {
+  id: string; url: string; name: string; mime: string; size: number
+  width?: number; height?: number
+  /** PDF：页数，和它的文字能不能读 */
+  pages?: number; text?: 'ok' | 'truncated' | 'none' | 'failed'
+  deleted?: boolean
+}
 export type ActivityStep = { tool: string; summary: string; ok?: boolean; ms?: number }
 export type ActivityPayload = { steps: ActivityStep[]; done: boolean }
 

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db } from './db.js'
+import { createPdfReader, type PdfReader, type PdfText } from './pdf-text.js'
 
 /**
  * 操作者发给同事的文件。原件放网关自己的目录 <data>/uploads/<id>：不进任何 workspace，同事改不了，
@@ -23,11 +24,14 @@ const MAX_COMPUTER_NAME_CHARS = 80
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
 const TEXT_TYPES = ['text/plain', 'text/markdown'] as const
-/** PDF 认得出来，但要等网关能把字抽出来才收：不收一个同事读不了的文件 */
-export const ALLOWED_TYPES: readonly string[] = [...IMAGE_TYPES, ...TEXT_TYPES]
+const PDF = 'application/pdf'
+/** PDF 收下的同时把字抽出来另存一份（见 pdf-text.ts）：同事读的是那份文字 */
+export const ALLOWED_TYPES: readonly string[] = [...IMAGE_TYPES, ...TEXT_TYPES, PDF]
 const ALIASES: Record<string, string> = { 'image/jpg': 'image/jpeg', 'text/x-markdown': 'text/markdown' }
 
 const UPLOAD_ID = /^[0-9a-f]{32}$/
+/** 上传目录里属于我们的文件名：原件，或 PDF 的文字版 */
+const UPLOAD_FILE = /^[0-9a-f]{32}(?:\.txt)?$/
 
 export type UploadErrorCode =
   | 'bad_request' | 'bad_base64' | 'too_large' | 'type_not_allowed' | 'type_mismatch' | 'image_too_big' | 'uploads_full'
@@ -42,6 +46,9 @@ export type UploadRow = {
   sha256: string
   width: number | null
   height: number | null
+  /** PDF 才有：总页数（解析不了就不知道），和文字抽取的结果 */
+  pages: number | null
+  text_state: PdfText['state'] | null
   thread_id: string | null
   message_id: number | null
   created_at: number
@@ -49,7 +56,12 @@ export type UploadRow = {
 }
 
 /** 消息 payload 和接口回的都是这个形状 */
-export type UploadView = { id: string; url: string; name: string; mime: string; size: number; width?: number; height?: number }
+export type UploadView = {
+  id: string; url: string; name: string; mime: string; size: number
+  width?: number; height?: number
+  /** PDF：页数；text 说它的文字能不能读（ok 全文、truncated 只有开头、none 没有文字层、failed 没抽出来） */
+  pages?: number; text?: PdfText['state']
+}
 
 export type Sniffed = { mime: string; width?: number; height?: number }
 
@@ -174,8 +186,9 @@ export const MODEL_IMAGE_MAX_SIDE = 8000
 export const MAX_IMAGES_PER_TURN = MAX_ATTACHMENTS
 
 const KIND: Record<string, string> = {
+  [PDF]: 'PDF',
   'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP', 'image/gif': 'GIF',
-  'text/markdown': 'Markdown', 'text/plain': 'text', 'application/pdf': 'PDF',
+  'text/markdown': 'Markdown', 'text/plain': 'text',
 }
 
 function humanSize(bytes: number): string {
@@ -200,30 +213,45 @@ const IMAGE_NOTE: Record<ImageNote, string> = {
  * 说了「在你电脑上」而其实不在，它会去读一个不存在的文件，然后编。
  */
 export function describeUpload(
-  upload: Pick<UploadRow, 'name' | 'mime' | 'size' | 'width' | 'height'>,
+  upload: Pick<UploadRow, 'name' | 'mime' | 'size' | 'width' | 'height'> & Partial<Pick<UploadRow, 'pages' | 'text_state'>>,
   where: { path?: string; image?: ImageNote; removed?: boolean },
 ): string {
   const image = isImage(upload.mime)
   const head = `[${image ? 'image' : 'file'} from your operator] ${upload.name}`
   if (where.removed) return `${head}. Your operator has removed it.`
-  const facts = [KIND[upload.mime] ?? upload.mime, ...(upload.width && upload.height ? [`${upload.width}×${upload.height}`] : []), humanSize(upload.size)]
+  const facts = [
+    KIND[upload.mime] ?? upload.mime,
+    ...(upload.width && upload.height ? [`${upload.width}×${upload.height}`] : []),
+    ...(upload.pages ? [`${upload.pages} page${upload.pages === 1 ? '' : 's'}`] : []),
+    humanSize(upload.size),
+  ]
   const seen = image && where.image ? IMAGE_NOTE[where.image] : '.'
-  const place = where.path ? `It is in your folder as ${where.path}.` : 'It is not on your computer.'
-  return `${head} (${facts.join(', ')})${seen} ${place}`
+  if (!where.path) return `${head} (${facts.join(', ')})${seen} It is not on your computer.`
+  // PDF 本身 read_file 读不了，读的是旁边那份文字；没有文字就直说，免得它对着二进制硬读
+  const text = upload.text_state === 'ok' ? `, and its text as ${where.path}.txt`
+    : upload.text_state === 'truncated' ? `, and the beginning of its text as ${where.path}.txt` : ''
+  const unreadable = upload.text_state === 'none' ? ' It has no text to read; it is probably a scan.'
+    : upload.text_state === 'failed' ? ' Its text could not be extracted.' : ''
+  return `${head} (${facts.join(', ')})${seen} It is in your folder as ${where.path}${text}.${unreadable}`
 }
 
 export type Uploads = ReturnType<typeof createUploads>
 
-export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: number; now?: () => number }) {
+export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: number; now?: () => number; pdf?: PdfReader }) {
   const { db } = opts
   const dir = join(opts.dataDir, 'uploads')
   const now = opts.now ?? Date.now
   const maxTotal = opts.maxTotalBytes ?? 0
   const file = (id: string) => join(dir, id)
+  const textFile = (id: string) => join(dir, `${id}.txt`)
+  let pdfReader = opts.pdf
+  const readPdf: PdfReader = (bytes) => (pdfReader ??= createPdfReader())(bytes)
 
   const view = (u: UploadRow): UploadView => ({
     id: u.id, url: `/api/uploads/${u.id}`, name: u.name, mime: u.mime, size: u.size,
     ...(u.width && u.height ? { width: u.width, height: u.height } : {}),
+    ...(u.pages ? { pages: u.pages } : {}),
+    ...(u.text_state ? { text: u.text_state } : {}),
   })
 
   function get(id: unknown): UploadRow | null {
@@ -256,6 +284,8 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
       }
     }
     if (maxTotal > 0 && stored() + bytes.length > maxTotal) return refuse('uploads_full', 507)
+    // PDF：字抽不出来（扫描件、坏文件、超时）也收下，如实记着；同事会被告知没有可读的文字
+    const pdf = mime === PDF ? await readPdf(bytes) : null
 
     const row: UploadRow = {
       id: randomBytes(16).toString('hex'),
@@ -265,6 +295,8 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
       sha256: createHash('sha256').update(bytes).digest('hex'),
       width: found.width ?? null,
       height: found.height ?? null,
+      pages: pdf?.pages ?? null,
+      text_state: pdf?.state ?? null,
       thread_id: null,
       message_id: null,
       created_at: now(),
@@ -272,9 +304,10 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
     }
     await mkdir(dir, { recursive: true })
     await writeFile(file(row.id), bytes, { flag: 'wx', mode: 0o600 })
+    if (pdf?.text) await writeFile(textFile(row.id), pdf.text, { flag: 'wx', mode: 0o600 })
     db.prepare(
-      `INSERT INTO uploads (id, name, mime, size, sha256, width, height, created_at)
-       VALUES (@id, @name, @mime, @size, @sha256, @width, @height, @created_at)`,
+      `INSERT INTO uploads (id, name, mime, size, sha256, width, height, pages, text_state, created_at)
+       VALUES (@id, @name, @mime, @size, @sha256, @width, @height, @pages, @text_state, @created_at)`,
     ).run(row)
     return { ok: true, upload: row }
   }
@@ -283,6 +316,13 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
     const row = get(id)
     if (!row || row.deleted_at !== null) return null
     return readFile(file(row.id)).catch(() => null)
+  }
+
+  /** PDF 抽出来的文字；没有（不是 PDF、扫描件、没抽出来、已移除）就是 null */
+  async function text(id: unknown): Promise<string | null> {
+    const row = get(id)
+    if (!row || row.deleted_at !== null || (row.text_state !== 'ok' && row.text_state !== 'truncated')) return null
+    return readFile(textFile(row.id), 'utf8').catch(() => null)
   }
 
   /** 发消息前先验一遍：都在、都没用过、没有重复。真正挂上去由 attach 在落消息的那个事务里做 */
@@ -312,6 +352,7 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
     const at = now()
     db.prepare('UPDATE uploads SET deleted_at = ? WHERE id = ?').run(at, row.id)
     await rm(file(row.id), { force: true })
+    await rm(textFile(row.id), { force: true })
     return { ...row, deleted_at: at }
   }
 
@@ -350,21 +391,23 @@ export function createUploads(opts: { db: Db; dataDir: string; maxTotalBytes?: n
     const orphans = db.prepare('SELECT id FROM uploads WHERE message_id IS NULL AND created_at < ?').all(cutoff) as { id: string }[]
     for (const { id } of orphans) {
       await rm(file(id), { force: true })
+      await rm(textFile(id), { force: true })
       db.prepare('DELETE FROM uploads WHERE id = ?').run(id)
     }
-    const onDisk = new Set((await readdir(dir).catch(() => [] as string[])).filter((name) => UPLOAD_ID.test(name)))
+    const onDisk = new Set((await readdir(dir).catch(() => [] as string[])).filter((name) => UPLOAD_FILE.test(name)))
     const live = db.prepare('SELECT * FROM uploads WHERE deleted_at IS NULL').all() as UploadRow[]
     let missing = 0
     for (const row of live) {
+      onDisk.delete(`${row.id}.txt`)
       if (onDisk.delete(row.id)) continue
       const at = now()
       db.prepare('UPDATE uploads SET deleted_at = ? WHERE id = ?').run(at, row.id)
       onMissing?.({ ...row, deleted_at: at })
       missing++
     }
-    for (const name of onDisk) await rm(file(name), { force: true })
+    for (const name of onDisk) await rm(join(dir, name), { force: true })
     return { orphans: orphans.length, strays: onDisk.size, missing }
   }
 
-  return { save, get, bytes, view, claim, attach, remove, seen, markPlaced, markShown, sweep, stored }
+  return { save, get, bytes, text, view, claim, attach, remove, seen, markPlaced, markShown, sweep, stored }
 }

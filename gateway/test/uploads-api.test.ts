@@ -8,6 +8,7 @@ import type { AssistantTurn, ChatMsg, LLM } from '../src/llm.js'
 import { createPool } from '../src/pool.js'
 import { createApp } from '../src/server.js'
 import { MAX_UPLOAD_REQUEST_BYTES, MODEL_IMAGE_MAX_BYTES } from '../src/uploads.js'
+import { makePdf } from './fixtures/pdf-samples.js'
 import { b64, html, png } from './fixtures/upload-samples.js'
 
 const scout = { id: 'researcher', name: 'Scout', role: 'research', emoji: '🔎', soul_path: '' }
@@ -259,6 +260,54 @@ describe('sending a message with attachments', () => {
     await ctx.idle()
     expect(placed).toEqual([`uploads/${notes.id.slice(0, 8)}-notes.md`])
     expect(ctx.userLines(ctx.sent[1]!)[1]!.content).toContain('It is in your folder as uploads/')
+  })
+})
+
+describe('sending a PDF', () => {
+  it('gives the teammate the document and its text, and tells it where both are', async () => {
+    const ctx = setup()
+    const bytes = makePdf(['Quarterly plan', 'Risks: none'])
+    const { res, body } = await ctx.upload('plan.pdf', 'application/pdf', bytes)
+    expect(res.status).toBe(201)
+    expect(body).toMatchObject({ name: 'plan.pdf', mime: 'application/pdf', pages: 2, text: 'ok' })
+    await ctx.send(DM, { text: 'summarise this', attachments: [{ id: body.id }] })
+    await ctx.idle()
+    const at = `uploads/${body.id.slice(0, 8)}-plan.pdf`
+    expect(ctx.userLines(ctx.sent[0]!)[1]!.content!.split('\n')[0])
+      .toBe(`[file from your operator] plan.pdf (PDF, 2 pages, ${bytes.length} B). It is in your folder as ${at}, and its text as ${at}.txt.`)
+    const computer = ctx.computerOf(scout.id)
+    expect(computer.files.get(at)).toEqual(bytes)
+    expect(computer.files.get(`${at}.txt`)?.toString()).toBe('--- page 1 ---\nQuarterly plan\n\n--- page 2 ---\nRisks: none\n')
+    expect(listMessages(ctx.db, DM)[1]!.payload).toMatchObject({ mime: 'application/pdf', pages: 2, text: 'ok' })
+    // 取回的是原件，按下载给
+    const fetched = await ctx.app.request(body.url)
+    expect(fetched.headers.get('content-type')).toBe('application/pdf')
+    expect(fetched.headers.get('content-disposition')).toBe("attachment; filename*=UTF-8''plan.pdf")
+    expect(Buffer.from(await fetched.arrayBuffer())).toEqual(bytes)
+  })
+
+  it('says a scan has no text and puts only the document on the computer', async () => {
+    const ctx = setup()
+    const { body } = await ctx.upload('scan.pdf', 'application/pdf', makePdf([null]))
+    await ctx.send(DM, { text: 'read this', attachments: [{ id: body.id }] })
+    await ctx.idle()
+    expect(ctx.userLines(ctx.sent[0]!)[1]!.content).toContain('It has no text to read; it is probably a scan.')
+    expect([...ctx.computerOf(scout.id).files.keys()]).toEqual([`uploads/${body.id.slice(0, 8)}-scan.pdf`])
+  })
+
+  it('does not call the document placed until its text is there too', async () => {
+    let failText = true
+    const placed: string[] = []
+    const ctx = setup({ putFile: async (path) => { if (failText && path.endsWith('.txt')) throw new Error('disk full'); placed.push(path) } })
+    const { body } = await ctx.upload('plan.pdf', 'application/pdf', makePdf(['Quarterly plan']))
+    await ctx.send(DM, { text: 'read this', attachments: [{ id: body.id }] })
+    await ctx.idle()
+    expect(ctx.userLines(ctx.sent[0]!)[1]!.content).toContain('It is not on your computer.')
+    failText = false
+    await ctx.send(DM, { text: 'again' })
+    await ctx.idle()
+    expect(ctx.userLines(ctx.sent[1]!)[1]!.content).toContain('and its text as uploads/')
+    expect(placed.filter((p) => p.endsWith('.txt'))).toHaveLength(1)
   })
 })
 

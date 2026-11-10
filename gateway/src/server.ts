@@ -237,6 +237,9 @@ export function createApp(deps: AppDeps): GatewayApp {
         const bytes = await store.bytes(upload.id)
         if (!bytes) continue
         await computer.putFile(computerPath(upload), bytes)
+        // PDF 的文字版放在原件旁边；两份都到了才算放好（只到一份的话下一回合接着放）
+        const text = await store.text(upload.id)
+        if (text !== null) await computer.putFile(`${computerPath(upload)}.txt`, Buffer.from(text, 'utf8'))
         store.markPlaced(upload.id, bot.id)
         placed.add(upload.id)
       } catch {
