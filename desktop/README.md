@@ -32,11 +32,21 @@ Inside it: `data/` (the gateway's data: database, token, model key, teammates' f
 `session/` (the window's own cookies and cache), `logs/gateway.log` and `desktop.json` (the port it settled on). `OPENSUPERBOT_DESKTOP_ROOT` moves the
 whole folder, for development and tests. Deleting the folder removes everything.
 
+Closing the window does not quit: teammates keep working and routines keep firing. The menu bar icon (the tray on
+Linux) opens the window again and says how many teammates are working and how much waits on you; the Dock badge
+counts what waits on you. While the window is away, approvals, questions and sign-in requests arrive as system
+notifications, and clicking one opens that thread. Quitting from the menu bar icon or with ⌘Q asks first when a
+teammate is working or a routine is on, because nothing runs once the app is closed. A quit the app did not start
+(logging out, shutting down, a signal) never asks, so it cannot hold up a shutdown. On Linux desktops without a
+tray (GNOME without the AppIndicator extension), open the app again to bring the window back.
+
 The window shows only the gateway's UI. Links to other sites open in your browser; the gateway's own pages
 (a teammate's screen, an attachment) open in an app window, signed in; other kinds of links are blocked.
 Attachments download into your Downloads folder without overwriting a file of the same name. Pages may show
 notifications and write to the clipboard (the Copy buttons), nothing else: no camera, microphone, location or
 clipboard reading.
 
-For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser, and
-`OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder.
+For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser,
+`OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder, and with `OPENSUPERBOT_DESKTOP_TEST=1` the app
+reads `close` and `quit` from standard input, while `OPENSUPERBOT_DESKTOP_QUIT_ANSWERS=cancel,quit` answers the quit
+question in order. The tray icons come from `node desktop/scripts/tray-icons.mjs`.

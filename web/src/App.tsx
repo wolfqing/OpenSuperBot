@@ -81,8 +81,21 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [setupBrowser, setSetupBrowser] = useState<BrowserStatus | null>(null)
 
+  // #thread=<id>：打开就是那条对话。桌面版点系统通知、别人发来的链接都走这个
+  useEffect(() => {
+    const apply = () => {
+      const m = /^#thread=(.+)$/.exec(window.location.hash)
+      if (m) setSelectedId(decodeURIComponent(m[1]!))
+    }
+    apply()
+    window.addEventListener('hashchange', apply)
+    return () => window.removeEventListener('hashchange', apply)
+  }, [])
+
   const selected = useMemo(
-    () => conversations.find((c) => c.id === selectedId) ?? null,
+    // 选中的对话不存在（链接点名了一条删掉的对话、同事被移走）：显示第一条，别停在空白页。
+    // 在这里算而不是事后改 selectedId：链接变化和列表刷新谁先谁后、被不被合并成一次渲染，结果都一样
+    () => conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null,
     [conversations, selectedId],
   )
   const threadId = selected?.id ?? null
@@ -105,7 +118,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
     setPanel(next)
   }, [])
   // 面板属于某一位同事：换了线程就收起，免得新名字盖在旧屏幕上
-  useEffect(() => { showPanel(null) }, [selectedId, showPanel])
+  useEffect(() => { showPanel(null) }, [selected?.id, showPanel])
 
   /** 拉消息期间经 WS 到达的更新先记下来，拉回来后叠在快照上，免得被旧快照覆盖掉 */
   const liveDuringFetch = useRef<Map<number, Message> | null>(null)
@@ -370,7 +383,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
     <div className="app">
       <Sidebar
         conversations={conversations}
-        selectedId={selectedId}
+        selectedId={selected?.id ?? null}
         statuses={statuses}
         onSelect={setSelectedId}
         onNewBot={() => { setHireError(undefined); setHiring(true) }}

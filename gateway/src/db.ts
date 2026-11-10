@@ -463,6 +463,13 @@ function pendingByThread(db: Db): Map<string, number> {
   return new Map(rows.map((r) => [r.thread_id, r.n]))
 }
 
+/** 一共有多少件等着操作者：侧栏琥珀色徽章、桌面版 Dock 角标都是这个数 */
+export function pendingCount(db: Db): number {
+  let n = 0
+  for (const v of pendingByThread(db).values()) n += v
+  return n
+}
+
 /** 某位同事手上有没有等着操作者的事：待批的审批、没回答的问题，或者它最后一句话是在请人登录 */
 export function waitsOnOperator(db: Db, botId: string): boolean {
   const held = db.prepare(`SELECT 1 FROM approvals WHERE bot_id = ? AND status = 'pending' LIMIT 1`).get(botId)

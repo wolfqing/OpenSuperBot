@@ -33,6 +33,9 @@ names.
 - **Demo mode says so where you work.** A thread whose teammate runs the scripted demo model shows a banner under
   its header (in a group, naming who) with a button to connect a real model, and the model chip reads "Demo mode"
   instead of the service and `stub`.
+- **Links to a thread.** `#thread=<id>` at the end of the UI's address opens that conversation; a link to one that
+  is gone opens the first. `GET /api/summary` gives how many teammates are working, how much waits on you and how
+  many routines are on.
 - **Ask one teammate in a group.** Type `@` in a group thread to pick who should answer; only they run a turn,
   and the chief closes with a dispatch table only when it is named too (named alone, it just answers). For other
   clients, `POST /api/threads/group:…/messages` takes an optional `mentions` list of teammate ids, and an `@id`
@@ -65,7 +68,9 @@ names.
   open in an app window, signed in, other kinds of links are blocked, attachments download to your Downloads
   folder without overwriting, and pages may only show notifications and write to the clipboard. If port 4747 is
   taken (a gateway run from source, say) it takes the next free one and keeps it, so webhook addresses stay
-  put; Settings → About shows the port. There is no
+  put; Settings → About shows the port. Closing the window keeps it running, with a menu bar icon and a Dock badge
+  for what waits on you; approvals, questions and sign-in requests notify while the window is away; quitting from
+  the app asks first while work or routines are running. There is no
   download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
 
 ### Changed

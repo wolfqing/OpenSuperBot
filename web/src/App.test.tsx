@@ -342,4 +342,27 @@ describe('App', () => {
     expect(await screen.findByText(/grok-4\.7/)).toBeInTheDocument() // 连接拿回来了，才算数
     expect(screen.queryByText(/Replies here are scripted/)).toBeNull()
   })
+
+  it('opens the thread a #thread= link names, now and when the link changes, and falls back if it is gone', async () => {
+    window.location.hash = '#thread=dm%3Achief'
+    mockGateway({ conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })] })
+    render(<App />)
+    await ready()
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Chief'))
+    await act(async () => {
+      window.location.hash = '#thread=dm%3Aresearcher'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Scout'))
+    window.location.hash = ''
+  })
+
+  it('a link to a thread that no longer exists lands on the first one', async () => {
+    window.location.hash = '#thread=dm%3Agone'
+    mockGateway({ conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })] })
+    render(<App />)
+    await ready()
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Scout'))
+    window.location.hash = ''
+  })
 })
