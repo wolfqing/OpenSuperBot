@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { loadConfig, type Config } from '../src/config.js'
-import { createLLM, createLiveLLM, type ChatMsg, type ToolDef } from '../src/llm.js'
+import { EARLIER_SCREENSHOT, createLLM, createLiveLLM, type ChatMsg, type ToolDef } from '../src/llm.js'
 
 const toolDefs: ToolDef[] = [{ type: 'function', function: { name: 'message_user', parameters: {} } }]
 
@@ -183,6 +183,25 @@ describe('createLLM resilience', () => {
     expect((await llm.chat(hi, [])).usage).toEqual({ prompt: 1200, completion: 80, cached: 1024 })
   })
 
+  it('keeps an image the operator sent this turn when a later screenshot replaces the earlier ones', async () => {
+    let body: { messages: Record<string, unknown>[] } | null = null
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      body = JSON.parse(String(init!.body))
+      return new Response(okBody())
+    }) as typeof fetch
+    const llm = createLLM(loadConfig({}), fakeFetch)
+    await llm.chat([
+      { role: 'user', content: 'find this product', images: ['data:image/png;base64,MINE'], keepImages: true },
+      { role: 'user', content: 'first shot', images: ['data:image/png;base64,ONE'] },
+      { role: 'user', content: 'second shot', images: ['data:image/png;base64,TWO'] },
+    ], [])
+    expect(body!.messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'find this product' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,MINE' } }] },
+      { role: 'user', content: EARLIER_SCREENSHOT },
+      { role: 'user', content: [{ type: 'text', text: 'second shot' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,TWO' } }] },
+    ])
+  })
+
   it('sends attached images as image_url parts', async () => {
     let body: { messages: unknown[] } | null = null
     const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -233,6 +252,29 @@ describe('stub model', () => {
       content: 'from now on quiet accounts wait for my read\n\n(Current time: Sunday 2026-09-27 22:40, Asia/Shanghai. Routine cron expressions run in this timezone.)',
     }], toolDefs)
     expect((turn.toolCalls[0]!.args as { rule: string }).rule).toBe('quiet accounts wait for my read')
+  })
+
+  it('acknowledges files the operator attached, by name, and says when it can see the picture', async () => {
+    const llm = createLLM(loadConfig({ OPENSUPERBOT_MODEL: 'stub' }))
+    const seen = await llm.chat([
+      { role: 'user', content: 'what is this?' },
+      { role: 'user', content: '[image from your operator] chart.png (PNG, 640×480, 12 KB), shown with this message. It is in your folder as uploads/1a2b3c4d-chart.png.', images: ['data:image/png;base64,AA'], keepImages: true },
+      { role: 'user', content: '[file from your operator] notes.md (Markdown, 1 KB). It is in your folder as uploads/5e6f7a8b-notes.md.\n\n(Current time: Sunday 2026-09-27 22:40, Asia/Shanghai. Routine cron expressions run in this timezone.)' },
+    ], toolDefs)
+    expect(seen.toolCalls).toEqual([])
+    expect(seen.content).toBe('Got chart.png and notes.md. I can see the picture. Both are in my uploads folder.')
+    const blind = await llm.chat([
+      { role: 'assistant', content: 'Earlier reply.' },
+      { role: 'user', content: '[image from your operator] chart.png (PNG, 640×480, 12 KB). You cannot see images with your current model. It is not on your computer.' },
+    ], toolDefs)
+    expect(blind.content).toBe('Got chart.png. I cannot see pictures with this model. It did not reach my computer.')
+    // 以前回合里的附件不算这次的
+    const later = await llm.chat([
+      { role: 'user', content: '[file from your operator] notes.md (Markdown, 1 KB). It is in your folder as uploads/5e6f7a8b-notes.md.' },
+      { role: 'assistant', content: 'Got notes.md.' },
+      { role: 'user', content: 'do the thing' },
+    ], toolDefs)
+    expect(later.content ?? '').not.toContain('Got notes.md')
   })
 
   it('first replies with a report tool call, then closes with text', async () => {

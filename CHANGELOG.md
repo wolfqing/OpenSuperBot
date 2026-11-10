@@ -39,6 +39,22 @@ names.
   written in the text counts the same; display names in the text are not matched. A named id that is not in the
   group is refused with `400`, and so is a non-empty `mentions` in a direct thread. With no one named, the round
   is the same as before. Requested in #12.
+- **Send a teammate a file (API).** A client can upload an image, a text file or a Markdown file
+  (`POST /api/uploads`, JSON with base64, 8 MB each) and attach up to 8 to a message with `attachments`. The file
+  is copied into the `uploads/` folder of the teammate's workspace, where `read_file` can open it. A teammate on a
+  model that sees images gets the picture in front of the model on the first turn it meets it, and it stays in
+  view for that turn even when the teammate takes screenshots; later turns carry only its name. Each teammate
+  keeps its own record, so one you ask later in a group still gets the file and the picture. Uploads are served
+  from `GET /api/uploads/:id`, removed with `DELETE`, and capped in total by `OPENSUPERBOT_UPLOADS_MAX_MB`
+  (2048). The built-in web client shows attached files but cannot send them yet; that comes next. See
+  [docs/attachments.md](docs/attachments.md). Requested in #12.
+- **Send a teammate a PDF.** The gateway extracts the text when a PDF is uploaded and puts it beside the document
+  on the teammate's computer (`report.pdf` and `report.pdf.txt`, one heading per page), because `read_file` cannot
+  read a PDF itself. A scan, which has no text, and a document that cannot be parsed are accepted and reported as
+  such, to you in the upload's reply (`text`: `ok`, `truncated`, `none` or `failed`) and to the teammate in the
+  conversation. Extraction runs in a separate thread with limits on memory, time (20 seconds), pages (200) and
+  size. CJK radical look-alikes and Latin ligatures in the extracted text are replaced by the real characters, so
+  the text can be searched. This adds one dependency, `unpdf`, which has no native code.
 
 - **Groundwork for the desktop app.** The gateway can run inside the app: it tells the app when it is ready and on
   which port, shuts down in order when the app asks (routines stop, computers and their Chrome close), downloads
@@ -58,7 +74,7 @@ names.
   from the teammate's id so it is the same everywhere. It acts out the teammate's state — bobbing while working,
   hopping when it waits on you, shaking its head when stuck, smiling when done — and holds still when your system
   asks for reduced motion. The README screenshots are retaken with them.
-
+- Screenshots are served with `X-Content-Type-Options: nosniff`, like uploaded files.
 - The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
   computer's live screen in the panel. The conversation is the built-in scripted demo.
 

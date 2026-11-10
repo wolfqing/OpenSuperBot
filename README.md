@@ -177,6 +177,7 @@ pnpm start` and the launchd / systemd / Windows Task Scheduler templates in [doc
 | `OPENSUPERBOT_A2A_ALLOW` | *(empty)* | Peer handoffs, e.g. `researcher>market-watch` |
 | `OPENSUPERBOT_DAILY_TOKENS` | `0` (off) | Per-teammate daily token budget |
 | `OPENSUPERBOT_VISION` | *(off)* | Show the model its own screenshots |
+| `OPENSUPERBOT_UPLOADS_MAX_MB` | `2048` | Disk the files you send to teammates may use in all; `0` no limit |
 
 Every other setting — listen address, idle stop, per-computer limits, timeouts — is in
 [docs/always-on.md](docs/always-on.md#configuration).
@@ -252,7 +253,7 @@ browser and a folder of its own on your machine. Docker buys stronger isolation 
 resource limits), and on Windows it is still the only way to give a teammate a shell. See
 [docs/local-computers.md](docs/local-computers.md).
 
-More in [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/always-on.md](docs/always-on.md) ·
+More in [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
 [docs/security.md](docs/security.md) · [docs/workflows.md](docs/workflows.md) · [docs/comparison.md](docs/comparison.md) ·
 [CHANGELOG.md](CHANGELOG.md)
 

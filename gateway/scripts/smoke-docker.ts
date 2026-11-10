@@ -1,6 +1,7 @@
 // 真 Docker 冒烟：拉起两台 bot 电脑，走通 shell / 文件 / 浏览器 / 截图，并验收隔离与自愈。
 // 不进 pnpm test（需要 Docker 且慢）。跑法：
 //   pnpm --filter @opensuperbot/gateway run smoke:docker
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,7 +32,9 @@ console.log('· starting two computers…')
 const endpoints = await ensureContainer(docker, BOT, await workspace(BOT), { memoryMb: 2048, cpus: 2, timeZone })
 await ensureContainer(docker, PEER, await workspace(PEER), { timeZone })
 console.log('  endpoints:', { ...endpoints, shimToken: '…', vncPassword: '…' })
-const computer = createDockerComputer(endpoints)
+const computer = createDockerComputer(endpoints, {
+  putArchive: (tar, path) => docker.getContainer(containerName(BOT)).putArchive(tar, { path }),
+})
 
 const shell = await computer.shell('echo hi && pwd')
 check('shell', shell.exitCode === 0 && shell.stdout.includes('/workspace'), shell.stdout.trim().replace(/\n/g, ' '))
@@ -41,6 +44,21 @@ check('shim refuses calls without the container token', anonymous.status === 401
 
 await computer.writeFile('notes/todo.md', '# from smoke\n')
 check('write+read file', (await computer.readFile('notes/todo.md')).includes('from smoke'))
+
+// 操作者发来的文件：经 Docker 的归档接口进容器（不直接写宿主上挂进去的目录），二进制一个字节不差
+const picture = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 255])
+await computer.putFile!('uploads/1a2b3c4d-会议_notes.md', Buffer.from('# from the operator\n'))
+await computer.putFile!('uploads/5e6f7a8b-shot.png', picture)
+const sent = await computer.shell('wc -c < /workspace/uploads/5e6f7a8b-shot.png; od -An -tx1 /workspace/uploads/5e6f7a8b-shot.png | tr -d " \\n"')
+check('a file from the operator lands in /workspace/uploads', sent.stdout.includes('8') && sent.stdout.includes('89504e47000102ff')
+  && (await computer.readFile('uploads/1a2b3c4d-会议_notes.md')).includes('from the operator'), sent.stdout.trim().replace(/\n/g, ' '))
+// 同事把 uploads 换成指向别处的链接：路径是在容器里解析的，文件落不到宿主的同名位置
+const planted = `osb-smoke-${Date.now()}`
+await computer.shell(`rm -rf /workspace/uploads && mkdir -p /tmp/${planted} && ln -s /tmp/${planted} /workspace/uploads`)
+await computer.putFile!('uploads/9c0d1e2f-late.txt', Buffer.from('late')).catch(() => {})
+const inside = await computer.shell(`ls /tmp/${planted}; rm -f /workspace/uploads; mkdir -p /workspace/uploads`)
+check('a link planted at uploads/ never leads to the host', !existsSync(`/tmp/${planted}`),
+  inside.stdout.trim() ? `followed inside the container: ${inside.stdout.trim()}` : 'Docker refused to write through it')
 
 const nav = await computer.goto('https://example.com')
 check('browser_goto', /example/i.test(nav.title), `${nav.title} @ ${nav.url}`)

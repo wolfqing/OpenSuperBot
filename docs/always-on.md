@@ -131,6 +131,7 @@ curl -X POST -H 'Content-Type: application/json' -H 'X-OpenSuperBot-Key: <key>' 
 | `OPENSUPERBOT_MAX_STEPS` | `40` | Model steps one turn may take before the teammate pauses and says where it got to |
 | `OPENSUPERBOT_TURN_MINUTES` | `20` | Pause a turn that has run this long (checked between steps); `0` never |
 | `OPENSUPERBOT_VISION` | *(off)* | Show the model its own screenshots (vision models only) |
+| `OPENSUPERBOT_UPLOADS_MAX_MB` | `2048` | How much the files you send to teammates may take up in all; `0` no limit |
 | `OPENSUPERBOT_IDLE_STOP_MINUTES` | `60` | Stop idle computers; `0` never |
 | `OPENSUPERBOT_COMPUTERS` | `auto` | `docker`, `local`, or `auto`: Docker when the daemon answers and the bot image is built, else a local computer (see [local-computers.md](local-computers.md)) |
 | `OPENSUPERBOT_BROWSER` | *(auto-detected)* | Browser executable for local computers; else Chrome, Edge, Chromium or Brave are looked for, then a Chrome for Testing is downloaded into `<data>/browsers` |

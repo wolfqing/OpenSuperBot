@@ -22,6 +22,9 @@ injection — that follows an agent wherever it runs. This page is precise about
 | Each Docker computer is a cage | Its own container with memory, CPU and process limits, `no-new-privileges`, and only its own workspace mounted. Every port is published to `127.0.0.1` only. |
 | A local computer's files stay in its folder | `read_file` and `write_file` resolve inside that teammate's folder — `/workspace` maps to it — and a path that leaves it by name or through a symlink is refused. Its browser profile lives outside that folder, so the teammate cannot read its own cookie store through the file tools. |
 | A local computer's commands are off, then caged | Commands are off until you turn them on for that teammate in its panel. On, they run under Seatbelt (macOS) or bubblewrap (Linux): they can write only the teammate's folder and a private tmp; your whole home directory — keys, documents, other projects, your own browser profile, the gateway's data dir — is unreadable, except the runtime managers (`~/.nvm`, `~/.volta`, `~/.pyenv`, `~/.cargo/bin`, …) that are put back read-only; a data dir outside your home is hidden too; `HOME` points at the folder and the environment is a short whitelist. The switch refuses to turn on until a self-check shows the sandbox blocks a write outside the folder, a read of the gateway token and a listing of your home directory. A command that outlives its timeout, or that you stop, is killed with its whole process group. |
+| A file you send cannot run as a page | The gateway decides what an uploaded file is from its content, not from the type the client declared, and accepts only images, PDFs, plain text and Markdown; a page dressed up as an image is refused. It serves uploads with `nosniff` and a sandboxing `Content-Security-Policy`, images inline and everything else as a download. An upload is stored under a random id, never under the name it came with. |
+| A PDF you send cannot take the gateway down | A PDF's text is extracted in a separate thread with a memory ceiling, a 20-second limit, and caps of 200 pages and 2 million characters. A document that breaks the parser, or runs into a limit, is stored without text and reported as such; the upload itself still succeeds and the gateway keeps running. Pages are not rendered and scripts in the document are not run. |
+| A bot cannot steer where your files land | The original of a file you send stays in `<data>/uploads`, outside every workspace. The copy for a teammate goes onto its computer through the computer itself: into a container through Docker's archive API, where paths resolve inside the container, and onto a local computer through the same folder check as `write_file`, creating a new file only and never following a link at the name. The gateway does not write into a container's mounted folder from the host, where a link planted by the bot would point at your own disk. |
 | A bot cannot put code in front of you | The screen page and its noVNC code are served by the gateway from its own copy; only the raw VNC stream comes from the bot's computer. Nothing a bot changes inside its container reaches your browser as a page. |
 | Standing rules only change through the chip | `MEMORY.md` lives outside the bot's workspace. The only ways to change it are `save_memory`, `forget_memory` and the remove button in the computer panel, and each of them posts a diff chip; a `MEMORY.md` a bot writes into its own workspace is ignored. Screenshots — the evidence — are stored outside it too. |
 | Handoffs are allowlisted | By default only the chief of staff can reach everyone. Peer directions need `OPENSUPERBOT_A2A_ALLOW`, and relays stop after two hops. |
@@ -51,6 +54,12 @@ stronger. Keep them narrow and short-lived.
 **Treating what it reads as data.** Bots are told that pages, files and emails are data, never orders, and a
 webhook's body arrives explicitly labelled as data from another system. Prompt injection against tool-using
 agents is still an unsolved problem industry-wide.
+
+**A file you send is read like any other file.** What an attached file says reaches the teammate the way a page
+or a file in its workspace does: as data it was told not to take orders from. A turn in which it reads your file
+is still a turn you started, so your standing approvals and its rule and routine tools stay available in it, the
+same as when it reads a web page for you. If you forward a document from someone you do not trust, treat it like
+a link from them. An image is shown to the model as you sent it, metadata included.
 
 **Forgetting is visible, not approved.** In a turn you started, a bot can drop a standing rule with `forget_memory`
 without asking you first, the same way it can save one. Turns started by a routine, a webhook or a teammate cannot
@@ -97,6 +106,10 @@ A local computer is weaker than a container in ways you should know before you g
   running as your user — the same standing as your own browser profile, no better.
 - **Chromium's own sandbox stays on**, which it cannot inside a container. Pages the teammate visits get the
   protection your own browser gives you.
+- **A file placed on a local computer goes through a check, not a wall.** The gateway checks that the `uploads/`
+  path stays inside the teammate's folder and refuses to follow a link at the file name, as `write_file` does. A
+  teammate with commands on could in principle swap a folder for a link between the check and the write; a
+  container computer has no such gap, because there the path is resolved inside the container.
 - **On Windows, a local computer has no commands.** It gets the browser and the folder; Windows has no sandbox as
   mature as the two above, so the switch for commands stays off. File access is the gateway's own check, which on
   Windows also refuses other drives, network shares, device names such as `CON`, and alternate data streams.

@@ -18,6 +18,15 @@ describe('buildSystemPrompt', () => {
     expect(p).not.toContain('Your job:')
   })
 
+  it('tells a teammate with a computer where the files its operator sends end up', () => {
+    for (const kind of ['docker', 'local'] as const) {
+      const p = buildSystemPrompt(bot, 'soul', { hasComputer: true, computer: { kind, shell: false } })
+      expect(p).toContain('uploads/')
+      expect(p).toMatch(/attaches? .*thread/i)
+    }
+    expect(buildSystemPrompt(bot, 'soul')).not.toContain('uploads/')
+  })
+
   it('swaps the no-computer note for the computer briefing when one is attached', () => {
     expect(buildSystemPrompt(bot, 'soul')).toContain('no shell, browser, or file tools')
     const withComputer = buildSystemPrompt(bot, 'soul', { hasComputer: true })

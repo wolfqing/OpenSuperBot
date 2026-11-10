@@ -96,6 +96,21 @@ export type AgentDeps = {
   turnTimeoutMs?: number
   /** 谁叫起了这一回合；不传就当不是操作者，常驻授权不生效 */
   origin?: TurnOrigin
+  /** 操作者发来的文件：传进历史里的附件消息，回一份怎么给模型看的说明。不传 = 只报文件名 */
+  attachments?: (rows: MessageRow[]) => Promise<AttachmentBrief>
+}
+
+/**
+ * 这一回合里，历史中每条附件消息该怎么给模型看。由网关按「这位同事」现算：文件放到它电脑上了没有、
+ * 图给它的模型看过没有，各人各记各的。
+ */
+export type AttachmentBrief = {
+  /** 这条附件消息的那行说明；不认识这条消息就返回 undefined */
+  line(messageId: number): string | undefined
+  /** 这一回合要放到模型眼前的图（data URL）；不给看就返回 undefined */
+  image(messageId: number): string | undefined
+  /** 模型真的收到了这些图（第一次调用成功返回）：记下来，下一回合起只按名字提 */
+  shown(): void
 }
 
 /** 工具执行时要的回合级信息 */
@@ -147,6 +162,10 @@ export async function runTurn(
     const ruleBlock: RuleBlock | null = deps.origin !== 'operator' ? (deps.origin ?? 'unknown')
       : rows.some((m) => m.kind === 'webhook') ? 'outside-data' : null
     const ctx: TurnContext = { ...deps, ruleBlock }
+    const attached = rows.filter((m) => m.kind === 'attachment')
+    // 查不出来（盘坏了、没有上传目录）不拦回合：模型仍然知道有这么个文件，只是拿不到
+    const brief = attached.length ? await deps.attachments?.(attached).catch(() => undefined) : undefined
+    let imagesSeen = false
     const history: ChatMsg[] = [
       {
         role: 'system',
@@ -155,7 +174,7 @@ export async function runTurn(
           skills: deps.onReadSkill ? deps.skills : undefined, language: deps.language,
         }),
       },
-      ...rows.map((m) => toChatMsg(m, bot.id)),
+      ...rows.map((m) => toChatMsg(m, bot.id, brief)),
     ]
     // routine 触发 / 审批放行 / 群发言不落库，但模型必须看到这句话才知道要干什么
     if (!persistUserMessage && !alreadyStored) history.push({ role: 'user', content: userText })
@@ -181,6 +200,10 @@ export async function runTurn(
         return 'budget'
       }
       const turn = await llm.chat(messages, tools, { signal })
+      if (!imagesSeen) {
+        imagesSeen = true
+        brief?.shown()
+      }
       if (turn.usage) deps.onUsage?.(turn.usage)
       if (turn.toolCalls.length > 0) {
         messages.push(turn.raw)
@@ -798,8 +821,18 @@ function webhookForModel(payload: unknown): string {
     + `${open}\n${quoted}\n${close}`
 }
 
-function toChatMsg(m: MessageRow, selfId: string): ChatMsg {
+function toChatMsg(m: MessageRow, selfId: string, brief?: AttachmentBrief): ChatMsg {
   if (m.kind === 'webhook') return { role: 'user', content: webhookForModel(m.payload) }
+  // 操作者发来的文件：一行说明；图只在这位同事第一次见到它的回合带上，并在这一回合里钉住
+  if (m.kind === 'attachment') {
+    const name = String((m.payload as { name?: unknown } | null)?.name ?? 'file')
+    const image = brief?.image(m.id)
+    return {
+      role: 'user',
+      content: brief?.line(m.id) ?? `[file from your operator] ${name}. It is not available to you right now.`,
+      ...(image ? { images: [image], keepImages: true } : {}),
+    }
+  }
   // 放行/驳回是操作者发的、但没有正文：写成一句话，别给模型一条空的 user 消息（有的服务商会直接 400）
   if (m.kind === 'approval_resolved') return { role: 'user', content: `[operator decision] ${decisionForModel(m.payload)}` }
   if (m.sender === 'user') return { role: 'user', content: m.content }

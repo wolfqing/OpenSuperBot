@@ -27,6 +27,11 @@ export interface BotComputer {
   shell(cmd: string, timeoutMs?: number, signal?: AbortSignal): Promise<ShellResult>
   readFile(path: string): Promise<string>
   writeFile(path: string, content: string): Promise<void>
+  /**
+   * 把操作者发来的文件原样放到这台电脑上（path 相对 workspace，如 uploads/1a2b3c4d-notes.md）。
+   * 已经有同一份就什么都不做；有一份不一样的不覆盖。没有这个口子的电脑放不了文件。
+   */
+  putFile?(path: string, bytes: Buffer): Promise<void>
   goto(url: string): Promise<{ url: string; title: string }>
   /** 当前页可见文字（全文，分页由调用方做） */
   extract(maxChars?: number): Promise<string>
@@ -51,8 +56,9 @@ const TINY_PNG = Buffer.from(
 
 export function createFakeComputer(
   overrides: Partial<BotComputer> & { pageText?: string; pageLinks?: PageLink[] } = {},
-): BotComputer & { calls: string[] } {
+): BotComputer & { calls: string[]; files: Map<string, Buffer> } {
   const calls: string[] = []
+  const files = new Map<string, Buffer>()
   const pageText = overrides.pageText ?? 'Example Domain — this domain is for use in examples.'
   const pageLinks = overrides.pageLinks ?? []
   const base: BotComputer = {
@@ -62,6 +68,7 @@ export function createFakeComputer(
     async shell(cmd) { calls.push(`shell:${cmd}`); return { stdout: 'hi\n', stderr: '', exitCode: 0 } },
     async readFile(path) { calls.push(`read:${path}`); return 'file contents' },
     async writeFile(path) { calls.push(`write:${path}`) },
+    async putFile(path, bytes) { calls.push(`put:${path}`); files.set(path, bytes) },
     async goto(url) { calls.push(`goto:${url}`); return { url, title: 'Example Domain' } },
     async extract(maxChars) { calls.push('extract'); return maxChars ? pageText.slice(0, maxChars) : pageText },
     async links() { return pageLinks },
@@ -93,5 +100,5 @@ export function createFakeComputer(
       }) as never
     }
   }
-  return Object.assign(wrapped, { calls })
+  return Object.assign(wrapped, { calls, files })
 }

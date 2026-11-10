@@ -127,6 +127,7 @@ const gateway = createApp({
   timeZone: config.timeZone,
   maxSteps: config.maxSteps,
   turnMinutes: config.turnMinutes,
+  uploadsMaxMb: config.uploadsMaxMb,
   settings: { env: process.env, startedWith: config },
   setup: { browser, dockerReachable: () => dockerReachable(docker, 1_500), dockerImageReady: () => botImageReady(docker) },
 })
@@ -150,6 +151,17 @@ const pruneOldActions = () => {
 }
 pruneOldActions()
 setInterval(pruneOldActions, 24 * 60 * 60_000).unref()
+
+// 上传目录：传了没发出去的文件留一天就清；顺手对一遍账（盘上多出来的、记录还在文件没了的）
+const sweepUploads = () => {
+  gateway.sweepUploads().then(({ orphans, strays, missing }) => {
+    if (orphans || strays || missing) {
+      console.log(`[gateway] uploads: dropped ${orphans} never sent and ${strays} stray, marked ${missing} missing as removed`)
+    }
+  }).catch((err: unknown) => console.error('[gateway] could not tidy the uploads folder:', err))
+}
+sweepUploads()
+setInterval(sweepUploads, 60 * 60_000).unref()
 
 // WebSocket 用 node-server 自带的支持：升级请求照样先过 app（令牌、来源检查都在），二进制帧交成 ArrayBuffer
 app.get('/ws', upgradeWebSocket(() => ({

@@ -53,6 +53,8 @@ export type Config = {
   maxSteps: number
   /** 一个回合最长几分钟；0 = 不限 */
   turnMinutes: number
+  /** 操作者发来的文件总共最多占多少 MB；0 = 不限 */
+  uploadsMaxMb: number
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -132,5 +134,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     timeZone: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     maxSteps: num(env.OPENSUPERBOT_MAX_STEPS, 40) || 40,
     turnMinutes: num(env.OPENSUPERBOT_TURN_MINUTES, 20),
+    uploadsMaxMb: num(env.OPENSUPERBOT_UPLOADS_MAX_MB, 2048),
   }
 }

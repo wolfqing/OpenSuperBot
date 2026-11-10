@@ -193,6 +193,18 @@ describe('Claude: long browsing turns', () => {
     expect([0, 1, 10, 11, 15, 16, 20, 21, 40].map(screenshotsToHide)).toEqual([0, 0, 0, 5, 5, 10, 10, 15, 30])
   })
 
+  it('does not count an image the operator sent this turn among the screenshots to fold away', () => {
+    const mine: ChatMsg = { role: 'user', content: 'find this', images: ['data:image/png;base64,MINE'], keepImages: true }
+    const shots: ChatMsg[] = Array.from({ length: 11 }, (_, i) => ({ role: 'user', content: `shot ${i}`, images: ['data:image/png;base64,AA'] }))
+    const { messages, hidden } = toAnthropic([mine, { role: 'assistant', content: 'looking' }, ...shots])
+    expect(hidden).toBe(5)
+    const images = messages.flatMap((m) => (m.content as { type: string; source?: { data?: string } }[]).filter((b) => b.type === 'image'))
+    expect(images).toHaveLength(7)
+    expect(images[0]!.source?.data).toBe('MINE')
+    // 只有它一张、没有截图时也留着
+    expect(toAnthropic([mine]).hidden).toBe(0)
+  })
+
   it('asks the official API to drop thinking blocks it can no longer match once screenshots were folded away', async () => {
     const shots: ChatMsg[] = Array.from({ length: 11 }, (_, i) => ({ role: 'user', content: `shot ${i}`, images: ['data:image/png;base64,AA'] }))
     const { sent, fetchImpl } = fakeAnthropic([message([{ type: 'text', text: 'ok' }])])

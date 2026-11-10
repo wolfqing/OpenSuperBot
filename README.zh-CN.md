@@ -157,6 +157,7 @@ Linux 用 bubblewrap），只能写这位同事自己的文件夹。Windows 没�
 | `OPENSUPERBOT_A2A_ALLOW` | *(空)* | 同级交接，如 `researcher>market-watch` |
 | `OPENSUPERBOT_DAILY_TOKENS` | `0`（不限） | 每位同事每天的 token 预算 |
 | `OPENSUPERBOT_VISION` | *(关)* | 把截图喂回给模型看 |
+| `OPENSUPERBOT_UPLOADS_MAX_MB` | `2048` | 你发给同事的文件总共最多占多少磁盘；`0` 不限 |
 
 其余设置——监听地址、闲置停机、单台电脑的资源上限、超时——见
 [docs/always-on.md](docs/always-on.md#configuration)。
@@ -226,7 +227,7 @@ Build 驱动你本机的 `grok` 命令行——会话按项目分组，Markdown�
 自己的浏览器和文件夹。Docker 换来的是更强的隔离（每位同事一个容器，带资源上限）；在 Windows 上，目前仍然只有
 Docker 能给同事命令行。见 [docs/local-computers.md](docs/local-computers.md)。
 
-更多见 [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/always-on.md](docs/always-on.md) ·
+更多见 [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
 [docs/security.md](docs/security.md) · [docs/comparison.md](docs/comparison.md) · [CHANGELOG.md](CHANGELOG.md)
 
 ## 免责声明
