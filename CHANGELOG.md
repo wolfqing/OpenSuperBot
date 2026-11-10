@@ -24,6 +24,11 @@ names.
   group is refused with `400`, and so is a non-empty `mentions` in a direct thread. With no one named, the round
   is the same as before. Requested in #12.
 
+### Changed
+
+- The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
+  computer's live screen in the panel. The conversation is the built-in scripted demo.
+
 ## [0.5.0] - 2026-11-08
 
 Each teammate can run on its own AI: Claude, OpenAI, xAI, Gemini, MiniMax and other OpenAI-compatible
