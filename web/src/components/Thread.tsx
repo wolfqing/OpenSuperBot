@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type {
-  ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, BotRefPayload, Conversation, LoginPayload, MemoryPayload,
+  ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, AttachmentPayload, BotRefPayload, Conversation, LoginPayload, MemoryPayload,
   Message, QuestionPayload, ReportPayload, RoutinePayload, RuleDuration, ScreenshotPayload, WebhookPayload,
 } from '../types'
 import { useT, type T } from '../i18n'
@@ -202,6 +202,15 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         return <LoginChip payload={m.payload as LoginPayload} onOpenScreen={() => onOpenScreen?.()} />
       case 'activity': return <ActivityChip payload={m.payload as ActivityPayload} />
       case 'webhook': return <WebhookChip payload={m.payload as WebhookPayload} />
+      // 发文件的界面还没做：别的客户端发来的附件先按名字显示，点了在新标签页看或下载
+      case 'attachment': {
+        const file = m.payload as AttachmentPayload
+        return (
+          <div className="bubble">
+            📎 {file.deleted ? <s>{file.name}</s> : <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a>}
+          </div>
+        )
+      }
       case 'question':
         return <QuestionChip payload={m.payload as QuestionPayload} onAnswer={(choices) => onAnswer?.(m.id, choices)} />
       case 'approval_resolved': {

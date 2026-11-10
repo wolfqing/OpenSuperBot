@@ -45,6 +45,7 @@ describe('loadConfig', () => {
     expect(c.timeZone).toBeTruthy()
     expect(c.maxSteps).toBe(40)
     expect(c.turnMinutes).toBe(20)
+    expect(c.uploadsMaxMb).toBe(2048)
   })
 
   it('reads the per-turn limits, and never lets the step cap be zero', () => {

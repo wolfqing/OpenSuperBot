@@ -74,6 +74,8 @@ export type BotRefPayload = { from: string; fromName: string; content: string }
 export type LoginPayload = { site: string; why?: string }
 /** webhook 带来的东西，网关已排好版、截过长 */
 export type WebhookPayload = { routineId: number; name: string; body: string }
+/** 操作者发给同事的文件；deleted = 之后被移除了，线程里只剩名字 */
+export type AttachmentPayload = { id: string; url: string; name: string; mime: string; size: number; width?: number; height?: number; deleted?: boolean }
 export type ActivityStep = { tool: string; summary: string; ok?: boolean; ms?: number }
 export type ActivityPayload = { steps: ActivityStep[]; done: boolean }
 
@@ -163,6 +165,7 @@ export type MessageKind =
   | 'activity'
   | 'question'
   | 'webhook'
+  | 'attachment'
 
 export type Message = {
   id: number
@@ -182,6 +185,7 @@ export type Message = {
     | ActivityPayload
     | QuestionPayload
     | WebhookPayload
+    | AttachmentPayload
     | NoticePayload
     | null
   created_at: number

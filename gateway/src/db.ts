@@ -16,6 +16,7 @@ export type MessageKind =
   | 'activity'
   | 'question'
   | 'webhook'
+  | 'attachment'
 
 export type BotRow = {
   id: string
@@ -209,6 +210,31 @@ const MIGRATIONS: Migration[] = [
     if (!have.has('llm_connection')) db.exec('ALTER TABLE bots ADD COLUMN llm_connection TEXT')
     if (!have.has('llm_model')) db.exec('ALTER TABLE bots ADD COLUMN llm_model TEXT')
   },
+  // v8：操作者发给同事的文件。本体放 <data>/uploads/<id>，这里只记账；挂到哪条消息上、
+  // 每位同事「文件放到它电脑上了没有 / 图给它的模型看过没有」各记一份
+  (db) => db.exec(`
+    CREATE TABLE IF NOT EXISTS uploads (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      thread_id TEXT,
+      message_id INTEGER,
+      created_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_uploads_message ON uploads(message_id);
+    CREATE TABLE IF NOT EXISTS upload_seen (
+      upload_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      placed_at INTEGER,
+      shown_at INTEGER,
+      PRIMARY KEY (upload_id, bot_id)
+    );
+  `),
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

@@ -5,7 +5,7 @@ import { browsersDir, findBrowser, installBrowser } from './browsers.js'
 import type { BotComputer, ComputerKind } from './computer.js'
 import { createDockerComputer } from './computer-docker.js'
 import { createLocalComputer, type LocalLaunch } from './computer-local.js'
-import { BOT_IMAGE, ensureContainer, retireLegacyContainers, runningBotIds, stopBotContainer, type ContainerOptions } from './containers.js'
+import { BOT_IMAGE, containerName, ensureContainer, retireLegacyContainers, runningBotIds, stopBotContainer, type ContainerOptions } from './containers.js'
 import { runSandboxed, type Sandbox } from './sandbox.js'
 import { botDataDir, workspaceDir } from './screenshots.js'
 
@@ -47,7 +47,9 @@ export function createDockerBackend(
       await retireLegacy()
       const dir = workspaceDir(opts.dataDir, botId)
       await mkdir(dir, { recursive: true })
-      return createDockerComputer(await ensureContainer(docker, botId, dir, opts.containerOptions))
+      return createDockerComputer(await ensureContainer(docker, botId, dir, opts.containerOptions), {
+        putArchive: (tar, path) => docker.getContainer(containerName(botId)).putArchive(tar, { path }),
+      })
     },
     running: async () => {
       await retireLegacy()
