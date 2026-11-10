@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ApiError, SignedOut, answerQuestion, checkSession, connectEvents, createBot, fetchBots, fetchComputer, fetchConnections, fetchConversations,
-  fetchLanguage, fetchMessages, fetchProviders, fetchSetup, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
-  stopThread, updateRoutine,
+  fetchLanguage, fetchMessages, fetchProviders, fetchSetup, forgetMemoryRule, removeUpload, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
+  stopThread, updateRoutine, uploadFile,
 } from './api'
-import { BotModelChip, BotModelPicker, botModel } from './components/BotModelPicker'
+import { BotModelChip, BotModelPicker, botModel, botSeesImages } from './components/BotModelPicker'
 import { DemoBanner } from './components/DemoBanner'
 import { ComputerPanel } from './components/ComputerPanel'
 import { ModelsDialog } from './components/ModelsDialog'
@@ -368,6 +368,8 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
   }
 
   const thinking = selected ? selected.members.some((id) => statuses[id] === 'thinking') : false
+  // 单聊里才说得出「这位同事看不看得了图」；群里各人各样，不提
+  const seesImages = llms && selected?.kind === 'dm' && selected.members[0] ? botSeesImages(llms, selected.members[0]) : undefined
   // 这个对话里谁在用演示模型：按每位同事实际用的模型算；老网关没有连接信息就看 /api/setup 的 demo
   const inDemo = selected
     ? selected.members.filter((id) => (llms ? botModel(llms, id) === 'stub' : Boolean(setup?.demo)))
@@ -396,7 +398,19 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
           messages={messages}
           thinking={thinking}
           roster={roster}
-          onSend={(text, mentions) => { if (threadId) sendMessage(threadId, text, mentions).catch(guard) }}
+          // 没发出去要让输入框知道（它会把字和文件放回来、说明原因），所以登记完错误再抛回去
+          onSend={(text, mentions, attachments) => (threadId
+            ? sendMessage(threadId, text, mentions, attachments).catch((err: unknown) => { guard(err); throw err })
+            : undefined)}
+          files={{
+            upload: (file, mime, signal) => uploadFile(file, mime, signal).catch((err: unknown) => {
+              if (err instanceof SignedOut) setSignedOut(true)
+              throw err
+            }),
+            discard: (id) => { removeUpload(id).catch(guard) },
+            remove: (id) => { removeUpload(id).catch(guard) },
+            ...(seesImages === undefined ? {} : { seesImages }),
+          }}
           onDecide={(approvalId, decision, remember, items) => {
             resolveApproval(approvalId, decision, remember, items).catch(guard)
           }}

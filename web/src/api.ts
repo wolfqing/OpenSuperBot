@@ -1,5 +1,6 @@
+import { fileToBase64 } from './attachments'
 import type {
-  Bot, BotLlm, BrowserStatus, CheckResult, ComputerInfo, ConnectionsState, Conversation, FieldError, GatewayEvent, Message, ProviderPreset,
+  AttachmentPayload, Bot, BotLlm, BrowserStatus, CheckResult, ComputerInfo, ConnectionsState, Conversation, FieldError, GatewayEvent, Message, ProviderPreset,
   RoutineAction, RuleDuration, SettingsView, SetupInfo, AboutInfo,
 } from './types'
 
@@ -74,9 +75,39 @@ export const fetchConversations = () => getJson<Conversation[]>('/api/conversati
 export const fetchMessages = (threadId: string) => getJson<Message[]>(`/api/threads/${encodeURIComponent(threadId)}/messages`)
 export const fetchComputer = (botId: string) => getJson<ComputerInfo>(`/api/bots/${encodeURIComponent(botId)}/computer`)
 
-/** mentions：群里点名的同事 id，只叫他们作答；不传就是整个群 */
-export async function sendMessage(threadId: string, text: string, mentions?: string[]): Promise<void> {
-  await send('POST', `/api/threads/${encodeURIComponent(threadId)}/messages`, mentions?.length ? { text, mentions } : { text })
+/** mentions：群里点名的同事 id，只叫他们作答，不传就是整个群；attachments：一起发的文件（uploadFile 回的 id） */
+export async function sendMessage(threadId: string, text: string, mentions?: string[], attachments?: string[]): Promise<void> {
+  await send('POST', `/api/threads/${encodeURIComponent(threadId)}/messages`, {
+    text,
+    ...(mentions?.length ? { mentions } : {}),
+    ...(attachments?.length ? { attachments: attachments.map((id) => ({ id })) } : {}),
+  }, { strict: true })
+}
+
+/**
+ * 把一个文件传到网关，回来的就是线程里那条文件消息的 payload。走 JSON + base64：网关只收 JSON 的改动请求。
+ * mime 是我们按类型和扩展名认出来的（见 attachments.ts）；网关会按内容再认一遍，对不上就拒。
+ */
+export async function uploadFile(file: File, mime: string, signal?: AbortSignal): Promise<AttachmentPayload> {
+  const data = await fileToBase64(file)
+  signal?.throwIfAborted()
+  const res = await request('/api/uploads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: file.name, mime, data }),
+    ...(signal ? { signal } : {}),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+    throw new ApiError(body.error ?? `POST /api/uploads ${res.status}`, res.status, body.code)
+  }
+  return res.json() as Promise<AttachmentPayload>
+}
+
+/** 移除一个上传。已经不在了（404）不算失败：要的就是它不在 */
+export async function removeUpload(id: string): Promise<void> {
+  const res = await request(`/api/uploads/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new ApiError(`DELETE /api/uploads ${res.status}`, res.status)
 }
 
 export async function stopThread(threadId: string): Promise<void> {

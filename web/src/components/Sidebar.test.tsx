@@ -74,6 +74,17 @@ describe('Sidebar', () => {
     expect(screen.getByText('❓ Which reply first?')).toBeInTheDocument()
   })
 
+  it('previews a file you sent by its name', () => {
+    const sent = conversation({
+      last_message: {
+        id: 9, thread_id: 'dm:researcher', sender: 'user', kind: 'attachment', content: '', created_at: 9,
+        payload: { id: 'a'.repeat(32), url: '/api/uploads/a', name: 'plan.pdf', mime: 'application/pdf', size: 10 },
+      },
+    })
+    render(<Sidebar conversations={[sent]} selectedId={null} statuses={{}} onSelect={() => {}} onNewBot={() => {}} />)
+    expect(screen.getByText('📎 plan.pdf')).toBeInTheDocument()
+  })
+
   it('previews a webhook call as such', () => {
     const called = conversation({
       last_message: {
