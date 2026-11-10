@@ -53,12 +53,12 @@ const sent = await computer.shell('wc -c < /workspace/uploads/5e6f7a8b-shot.png;
 check('a file from the operator lands in /workspace/uploads', sent.stdout.includes('8') && sent.stdout.includes('89504e47000102ff')
   && (await computer.readFile('uploads/1a2b3c4d-会议_notes.md')).includes('from the operator'), sent.stdout.trim().replace(/\n/g, ' '))
 // 同事把 uploads 换成指向别处的链接：路径是在容器里解析的，文件落不到宿主的同名位置
-const probe = `osb-smoke-${Date.now()}`
-await computer.shell(`rm -rf /workspace/uploads && mkdir -p /tmp/${probe} && ln -s /tmp/${probe} /workspace/uploads`)
+const planted = `osb-smoke-${Date.now()}`
+await computer.shell(`rm -rf /workspace/uploads && mkdir -p /tmp/${planted} && ln -s /tmp/${planted} /workspace/uploads`)
 await computer.putFile!('uploads/9c0d1e2f-late.txt', Buffer.from('late')).catch(() => {})
-const inside = await computer.shell(`ls /tmp/${probe}; rm -f /workspace/uploads; mkdir -p /workspace/uploads`)
-check('a link planted at uploads/ is followed inside the container, never on the host', !existsSync(`/tmp/${probe}`),
-  inside.stdout.trim() || 'refused')
+const inside = await computer.shell(`ls /tmp/${planted}; rm -f /workspace/uploads; mkdir -p /workspace/uploads`)
+check('a link planted at uploads/ never leads to the host', !existsSync(`/tmp/${planted}`),
+  inside.stdout.trim() ? `followed inside the container: ${inside.stdout.trim()}` : 'Docker refused to write through it')
 
 const nav = await computer.goto('https://example.com')
 check('browser_goto', /example/i.test(nav.title), `${nav.title} @ ${nav.url}`)
