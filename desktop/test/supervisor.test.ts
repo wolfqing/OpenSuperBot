@@ -156,6 +156,17 @@ describe('the gateway supervisor', () => {
     expect(s.events.line).toHaveBeenCalledWith('Error: listen EADDRINUSE')
   })
 
+  it('tells this run’s output apart from earlier ones', () => {
+    const s = setup()
+    s.sup.start()
+    s.last().stderr.emit('data', 'Error: listen EADDRINUSE\n')
+    s.last().exit(1)
+    s.sup.retry()
+    s.last().stdout.emit('data', '[gateway] database schema v7\n')
+    expect(s.sup.lastRun()).toEqual(['[gateway] database schema v7'])
+    expect(s.sup.tail()).toContain('Error: listen EADDRINUSE')
+  })
+
   it('ignores a late ready from a gateway it already gave up on', () => {
     const s = setup()
     s.sup.start()

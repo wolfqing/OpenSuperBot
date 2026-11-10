@@ -34,7 +34,7 @@ const setup: SetupInfo = {
   },
 }
 const about: AboutInfo = {
-  version: null, dataDir: '/home/me/.opensuperbot', logs: 'stdout', runtime: { node: '24.14.0', platform: 'darwin', arch: 'arm64' }, computers: 'local',
+  version: null, dataDir: '/home/me/.opensuperbot', port: 4748, logs: 'stdout', runtime: { node: '24.14.0', platform: 'darwin', arch: 'arm64' }, computers: 'local',
 }
 
 function mockFetch(routes: Record<string, (body: Record<string, unknown>) => { status?: number; body: unknown }>) {
@@ -83,6 +83,7 @@ describe('SettingsDialog', () => {
     expect(screen.getByLabelText(/Automatic/)).toBeChecked()
     expect(screen.getByText('Run from source (no version number)')).toBeInTheDocument()
     expect(screen.getByText('/home/me/.opensuperbot')).toBeInTheDocument()
+    expect(screen.getByText('4748')).toBeInTheDocument()
     expect(screen.getByText('Printed in the terminal that runs the gateway')).toBeInTheDocument()
     expect(screen.getByText('Node 24.14.0 · darwin/arm64')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Manage AI models…' }))

@@ -6,6 +6,7 @@ import { diagnosticsText } from './diagnostics.js'
 import { openLog } from './logfile.js'
 import { dataUrl, errorPage, pageLang, startingPage } from './pages.js'
 import { appLayout, resources } from './paths.js'
+import { DEFAULT_PORT, choosePort, portInUse, probePort, readState, writeState } from './port.js'
 import { SAFE_WEB_PREFERENCES, downloadPath, permissionAllowed, secureContents } from './security.js'
 import { createSupervisor, type FailReason } from './supervisor.js'
 
@@ -21,8 +22,8 @@ app.setPath('userData', layout.session)
 
 /** 网关的会话 cookie（gateway/src/auth.ts 的 SESSION_COOKIE） */
 const SESSION_COOKIE = 'osb_session'
-/** 默认 4747；OPENSUPERBOT_PORT 可以指定（开发时和源码版网关错开）。被占了自动换端口在 C4 */
-const PORT = Number(process.env.OPENSUPERBOT_PORT) || 4747
+/** OPENSUPERBOT_PORT 指定了就只用它（开发时和源码版网关错开）；否则默认 4747，被占就换一个并记住（port.ts） */
+const ENV_PORT = Number(process.env.OPENSUPERBOT_PORT) || null
 const base = (port: number) => `http://127.0.0.1:${port}`
 
 if (!app.requestSingleInstanceLock()) {
@@ -36,7 +37,9 @@ function run() {
   const res = resources({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() })
   const log = openLog(layout.logFile)
   let win: BrowserWindow | null = null
-  let port = PORT
+  let port = ENV_PORT ?? readState(layout.root).port ?? DEFAULT_PORT
+  /** 起不来是因为端口刚被抢：自动换端口重来，最多这么多次，再不行就出错误页 */
+  let portRetries = 0
   let showing: 'starting' | 'gateway' | 'error' = 'starting'
   let quitting = false
   let lastFailure: FailReason = 'exited'
@@ -51,7 +54,7 @@ function run() {
       env: {
         ...process.env,
         OPENSUPERBOT_DATA: layout.data,
-        OPENSUPERBOT_PORT: String(PORT),
+        OPENSUPERBOT_PORT: String(port),
         OPENSUPERBOT_WEB_DIST: res.webDist,
         OPENSUPERBOT_TEAMMATES: res.teammates,
         OPENSUPERBOT_VERSION: app.getVersion(),
@@ -64,12 +67,40 @@ function run() {
     line: (text) => log.write(text),
     ready: (p) => {
       port = p
+      portRetries = 0
       say(`gateway ready on ${base(p)}`)
       void openGateway()
     },
     restarting: (attempt, delayMs) => say(`gateway crashed; restart #${attempt} in ${delayMs / 1000}s`),
-    failed: (reason) => showError(reason),
+    failed: (reason) => {
+      // 探测时空着、拉起时被抢了：换下一个端口自己重来，不劳人点
+      if (reason === 'exited' && !ENV_PORT && portInUse(supervisor.lastRun()) && portRetries < 3) {
+        portRetries++
+        void pickPort([port]).then((ok) => (ok ? supervisor.retry() : showError(reason)))
+        return
+      }
+      showError(reason)
+    },
   })
+
+  /**
+   * 选端口：记住的那个（第一次是 4747）还空着就用它；被占了就往后找一个、记住新的。
+   * avoid：刚刚证明用不了的端口。OPENSUPERBOT_PORT 指定了就不选
+   */
+  async function pickPort(avoid: number[] = []): Promise<boolean> {
+    if (ENV_PORT) return true
+    const state = readState(layout.root)
+    const remembered = state.port ?? DEFAULT_PORT
+    const chosen = await choosePort({ preferred: remembered, probe: probePort, avoid })
+    if (chosen === null) {
+      say(`no free port from ${DEFAULT_PORT} on; leaving it at ${remembered}`)
+      return false
+    }
+    if (chosen !== remembered) say(`port ${remembered} is in use; using ${chosen} from now on`)
+    if (chosen !== state.port) writeState(layout.root, { ...state, port: chosen })
+    port = chosen
+    return true
+  }
 
   /** 种上会话 cookie 再打开界面：不用登录链接。令牌每次现读（网关第一次启动时才生成） */
   async function openGateway() {
@@ -116,7 +147,8 @@ function run() {
     if (url === 'osb:retry') {
       showing = 'starting'
       void win?.loadURL(dataUrl(startingPage(lang())))
-      supervisor.retry()
+      portRetries = 0
+      void pickPort().finally(() => supervisor.retry())
     } else if (url === 'osb:logs') {
       void shell.openPath(layout.logs)
     }
@@ -202,6 +234,9 @@ function run() {
     say(`starting ${app.getVersion()} (Electron ${process.versions.electron}); data in ${layout.data}`)
     secureSession()
     createWindow()
-    supervisor.start()
+    void pickPort().finally(() => {
+      say(`gateway port ${port}`)
+      supervisor.start()
+    })
   })
 }

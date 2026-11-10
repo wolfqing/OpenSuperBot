@@ -79,7 +79,7 @@ describe('/api/settings', () => {
   it('says what the settings page shows under About, and the version only when the packager gave one', async () => {
     const plain = setup({ running: 'local' })
     expect(await (await plain.call('GET', '/api/about')).json()).toEqual({
-      version: null, dataDir: plain.dataDir, logs: 'stdout',
+      version: null, dataDir: plain.dataDir, port: 4747, logs: 'stdout',
       runtime: { node: process.versions.node, platform: process.platform, arch: process.arch },
       computers: 'local',
     })

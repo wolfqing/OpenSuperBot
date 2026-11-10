@@ -413,6 +413,7 @@ export const en = {
   'settings.about': 'About',
   'settings.about.version': 'Version',
   'settings.about.source': 'Run from source (no version number)',
+  'settings.about.port': 'Port',
   'settings.about.data': 'Data folder',
   'settings.about.logs': 'Logs',
   'settings.about.logsStdout': 'Printed in the terminal that runs the gateway',

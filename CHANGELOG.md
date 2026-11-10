@@ -47,10 +47,17 @@ names.
   its window in without a sign-in link, restarts a crashed gateway, and shows an error page with the log when it
   cannot start. Its window shows only the gateway's UI: other sites open in your browser, the gateway's own pages
   open in an app window, signed in, other kinds of links are blocked, attachments download to your Downloads
-  folder without overwriting, and pages may only show notifications and write to the clipboard. There is no
+  folder without overwriting, and pages may only show notifications and write to the clipboard. If port 4747 is
+  taken (a gateway run from source, say) it takes the next free one and keeps it, so webhook addresses stay
+  put; Settings → About shows the port. There is no
   download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
 
 ### Changed
+
+- **Teammates have faces instead of emoji.** Each avatar is a small coloured shape with a pair of eyes, picked
+  from the teammate's id so it is the same everywhere. It acts out the teammate's state — bobbing while working,
+  hopping when it waits on you, shaking its head when stuck, smiling when done — and holds still when your system
+  asks for reduced motion. The README screenshots are retaken with them.
 
 - The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
   computer's live screen in the panel. The conversation is the built-in scripted demo.

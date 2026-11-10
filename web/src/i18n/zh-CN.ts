@@ -410,6 +410,7 @@ export const zhCN: Record<MessageKey, string> = {
   'settings.about': '关于',
   'settings.about.version': '版本',
   'settings.about.source': '源码版（没有版本号）',
+  'settings.about.port': '端口',
   'settings.about.data': '数据目录',
   'settings.about.logs': '日志',
   'settings.about.logsStdout': '打在运行网关的终端里',

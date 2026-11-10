@@ -53,6 +53,8 @@ export function mountSettings(app: Hono, deps: SettingsDeps & { db: Db; /** 启�
   app.get('/api/about', (c) => c.json({
     version: env.OPENSUPERBOT_VERSION?.trim() || null,
     dataDir,
+    // 桌面版端口被占时会换一个（并记住）：webhook 地址、隧道都要用这个
+    port: startedWith.port,
     logs: env.OPENSUPERBOT_LOG_FILE?.trim() || 'stdout',
     runtime: { node: process.versions.node, platform: process.platform, arch: process.arch },
     computers: deps.runningKind ?? null,

@@ -24,8 +24,12 @@ Everything the app keeps is in one folder, named `OpenSuperBot` whatever the app
 | macOS | `~/Library/Application Support/OpenSuperBot` |
 | Linux | `$XDG_DATA_HOME/OpenSuperBot` (default `~/.local/share/OpenSuperBot`) |
 
+The gateway listens on 127.0.0.1, port 4747. If something else already uses it (a gateway run from source, say),
+the app takes the next free port and keeps using that one from then on, so webhook addresses and tunnels stay
+put; Settings → About shows it. `OPENSUPERBOT_PORT` pins a port instead.
+
 Inside it: `data/` (the gateway's data: database, token, model key, teammates' folders, the downloaded browser),
-`session/` (the window's own cookies and cache) and `logs/gateway.log`. `OPENSUPERBOT_DESKTOP_ROOT` moves the
+`session/` (the window's own cookies and cache), `logs/gateway.log` and `desktop.json` (the port it settled on). `OPENSUPERBOT_DESKTOP_ROOT` moves the
 whole folder, for development and tests. Deleting the folder removes everything.
 
 The window shows only the gateway's UI. Links to other sites open in your browser; the gateway's own pages

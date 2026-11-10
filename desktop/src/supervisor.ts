@@ -51,6 +51,8 @@ export type Supervisor = {
   /** 退出 App 时：请网关收摊，等它退（超时就强杀） */
   stop(): Promise<void>
   tail(): string[]
+  /** 最近这一次拉起以来的输出（判断这次为什么没起来，不被上一次的报错干扰） */
+  lastRun(): string[]
   state(): State
 }
 
@@ -76,9 +78,12 @@ export function createSupervisor(opts: SupervisorOptions, events: SupervisorEven
   let cancelTimer: (() => void) | null = null
   let exited: Promise<number> | null = null
   const tail: string[] = []
+  let thisRun: string[] = []
 
   const clearTimer = () => { cancelTimer?.(); cancelTimer = null }
   const record = (text: string) => {
+    thisRun.push(text)
+    if (thisRun.length > tailLines) thisRun.splice(0, thisRun.length - tailLines)
     tail.push(text)
     if (tail.length > tailLines) tail.splice(0, tail.length - tailLines)
     events.line?.(text)
@@ -93,6 +98,7 @@ export function createSupervisor(opts: SupervisorOptions, events: SupervisorEven
   const launch = () => {
     clearTimer()
     state = 'starting'
+    thisRun = []
     const c = opts.fork()
     child = c
     // stdout 和 stderr 各自攒半行：两路交错着来，也不会拼成一行
@@ -173,6 +179,7 @@ export function createSupervisor(opts: SupervisorOptions, events: SupervisorEven
       state = 'stopped'
     },
     tail: () => [...tail],
+    lastRun: () => [...thisRun],
     state: () => state,
   }
 }

@@ -219,6 +219,12 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
                 <dl className="settings-about">
                   <dt>{t('settings.about.version')}</dt>
                   <dd>{about.version ?? t('settings.about.source')}</dd>
+                  {about.port ? (
+                    <>
+                      <dt>{t('settings.about.port')}</dt>
+                      <dd>{about.port}</dd>
+                    </>
+                  ) : null}
                   <dt>{t('settings.about.data')}</dt>
                   <dd><code>{about.dataDir}</code></dd>
                   <dt>{t('settings.about.logs')}</dt>

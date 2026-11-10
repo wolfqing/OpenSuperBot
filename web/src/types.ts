@@ -271,6 +271,8 @@ export type SettingsView = {
 export type AboutInfo = {
   version: string | null
   dataDir: string
+  /** 网关在听的端口（老网关不给） */
+  port?: number
   logs: string
   runtime: { node: string; platform: string; arch: string }
   computers: 'local' | 'docker' | null
