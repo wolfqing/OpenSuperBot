@@ -46,6 +46,10 @@ Attachments download into your Downloads folder without overwriting a file of th
 notifications and write to the clipboard (the Copy buttons), nothing else: no camera, microphone, location or
 clipboard reading.
 
+Pages get no Node and no Electron. The main window's page sees one frozen object, `window.opensuperbot`, with
+`info()` (app version, platform, Electron version) and `loginItem.get()` / `loginItem.set(on)`; every call is
+checked in the main process to come from the gateway's own page, not a frame inside it or the error page.
+
 For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser,
 `OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder, and with `OPENSUPERBOT_DESKTOP_TEST=1` the app
 reads `close` and `quit` from standard input, while `OPENSUPERBOT_DESKTOP_QUIT_ANSWERS=cancel,quit` answers the quit

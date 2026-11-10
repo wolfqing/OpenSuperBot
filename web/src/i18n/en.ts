@@ -414,6 +414,8 @@ export const en = {
   'settings.about.version': 'Version',
   'settings.about.source': 'Run from source (no version number)',
   'settings.about.port': 'Port',
+  'settings.about.app': 'App',
+  'settings.about.desktop': 'Desktop app {version} (Electron {electron})',
   'settings.about.data': 'Data folder',
   'settings.about.logs': 'Logs',
   'settings.about.logsStdout': 'Printed in the terminal that runs the gateway',

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { FieldErrors, SignedOut, downloadBrowser, fetchAbout, fetchSettings, fetchSetup, saveSettings } from '../api'
+import { desktopApi, type DesktopInfo } from '../desktop'
 import { useT, type MessageKey } from '../i18n'
 import type { AboutInfo, BrowserStatus, ConnectionsState, FieldError, ProviderPreset, SettingsView, SetupInfo } from '../types'
 import { connectionLabel, fieldText } from './ModelsDialog'
@@ -41,6 +42,8 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [setup, setSetup] = useState<SetupInfo | null>(null)
   const [about, setAbout] = useState<AboutInfo | null>(null)
+  /** 桌面版才有（preload 给的）；浏览器里打开是 null */
+  const [desktop, setDesktop] = useState<DesktopInfo | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
   const [mirror, setMirror] = useState('')
@@ -61,6 +64,7 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
         if (err instanceof SignedOut) onSignedOut()
         else if (live) setLoadError(true)
       })
+    desktopApi()?.info().then((d) => { if (live) setDesktop(d) }).catch(() => {})
     return () => { live = false }
   }, [onSignedOut])
 
@@ -219,6 +223,12 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
                 <dl className="settings-about">
                   <dt>{t('settings.about.version')}</dt>
                   <dd>{about.version ?? t('settings.about.source')}</dd>
+                  {desktop ? (
+                    <>
+                      <dt>{t('settings.about.app')}</dt>
+                      <dd>{t('settings.about.desktop', { version: desktop.version, electron: desktop.electron })}</dd>
+                    </>
+                  ) : null}
                   {about.port ? (
                     <>
                       <dt>{t('settings.about.port')}</dt>

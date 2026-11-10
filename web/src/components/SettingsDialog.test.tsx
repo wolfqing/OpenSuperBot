@@ -155,4 +155,19 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
     expect(screen.getByText('源码版（没有版本号）')).toBeInTheDocument()
   })
+
+  it('shows the desktop app version when opened in the app, and nothing extra in a browser', async () => {
+    gateway(view())
+    const info = vi.fn(async () => ({ version: '0.6.0', platform: 'darwin', electron: '44.9.3' }))
+    vi.stubGlobal('opensuperbot', { info, loginItem: { get: vi.fn(), set: vi.fn() } })
+    show()
+    expect(await screen.findByText('Desktop app 0.6.0 (Electron 44.9.3)')).toBeInTheDocument()
+  })
+
+  it('in a browser there is no app row', async () => {
+    gateway(view())
+    show()
+    await screen.findByText('Run from source (no version number)')
+    expect(screen.queryByText(/Desktop app/)).toBeNull()
+  })
 })

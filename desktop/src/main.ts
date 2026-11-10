@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir, release } from 'node:os'
 import { join, sep } from 'node:path'
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, nativeImage, session, shell, utilityProcess, type MenuItemConstructorOptions } from 'electron'
+import { fileURLToPath } from 'node:url'
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, session, shell, utilityProcess, type MenuItemConstructorOptions } from 'electron'
 import { fetchNames, fetchSummary, notificationFor, quitQuestion, texts, trayStatus, watchGateway, type GatewayMessageEvent, type Summary } from './activity.js'
 import { diagnosticsText } from './diagnostics.js'
+import { registerDesktopApi } from './ipc.js'
 import { openLog } from './logfile.js'
+import { loginItem } from './loginitem.js'
 import { dataUrl, errorPage, pageLang, startingPage } from './pages.js'
 import { appLayout, resources } from './paths.js'
 import { DEFAULT_PORT, choosePort, portInUse, probePort, readState, writeState } from './port.js'
@@ -257,7 +260,8 @@ function run() {
   function createWindow() {
     win = new BrowserWindow({
       width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0d0d0d',
-      webPreferences: { ...SAFE_WEB_PREFERENCES },
+      // 只有主窗口带 preload（window.opensuperbot）；App 里另开的窗口（屏幕、附件）不需要
+      webPreferences: { ...SAFE_WEB_PREFERENCES, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) },
     })
     // 关窗不退：同事和例行任务接着跑，托盘或 Dock 上再打开
     win.on('close', (e) => {
@@ -399,6 +403,12 @@ function run() {
   void app.whenReady().then(() => {
     say(`starting ${app.getVersion()} (Electron ${process.versions.electron}); data in ${layout.data}`)
     secureSession()
+    registerDesktopApi(ipcMain, {
+      gatewayOrigin: () => base(port),
+      info: () => ({ version: app.getVersion(), platform: process.platform, electron: process.versions.electron ?? '' }),
+      loginItem: loginItem(process.platform, app),
+      log: (line) => say(line),
+    })
     setMenu()
     createWindow()
     createTray()
