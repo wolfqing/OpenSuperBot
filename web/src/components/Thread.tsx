@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type {
   ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, BotRefPayload, Conversation, LoginPayload, MemoryPayload,
   Message, QuestionPayload, ReportPayload, RoutinePayload, RuleDuration, ScreenshotPayload, WebhookPayload,
@@ -37,11 +37,28 @@ function dayLabel(ts: number, now: Date, t: T): string {
 const timeLabel = (ts: number, locale: string | undefined) =>
   new Date(ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 
+type Mention = { id: string; name: string; emoji: string }
+
+/** 光标前正在打的 `@查询`：行首、空白或左括号后面的 @，一直到光标，中间没有空白 */
+const MENTION_QUERY = /(?:^|[\s(（])@([^\s@]*)$/u
+
+function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
+  const m = MENTION_QUERY.exec(text.slice(0, caret))
+  return m ? { start: caret - m[1]!.length - 1, query: m[1]! } : null
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** 选过的人名还在正文里（没被删掉、也不是更长名字的一截），才算点了名 */
+const stillMentioned = (text: string, name: string) =>
+  new RegExp(`(?:^|[\\s(（])@${escapeRe(name)}(?![\\p{L}\\p{N}])`, 'u').test(text)
+
 export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra, banner }: {
   conversation: Conversation
   messages: Message[]
   thinking: boolean
-  onSend: (text: string) => void
+  /** mentions：群里点了名的同事 id；没点名就是整个群 */
+  onSend: (text: string, mentions?: string[]) => void
   onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void
   /** 问题卡片上点了选项 */
   onAnswer?: (messageId: number, choices: string[]) => void | Promise<void>
@@ -57,6 +74,37 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLTextAreaElement>(null)
+  // 群里打 @ 点名：光标位置决定在补全哪一段；Esc 关掉的那一个 @ 不再弹，换一个 @ 才弹
+  const [caret, setCaret] = useState(0)
+  const [picked, setPicked] = useState<Mention[]>([])
+  const [active, setActive] = useState(0)
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null)
+  const menuId = useId()
+  useEffect(() => { setPicked([]) }, [conversation.id])
+  // 选中一位后把光标放回名字后面：要在 React 换掉文本之后、下一次按键之前，所以用 layout effect 而不是下一帧
+  const caretAfterPick = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const at = caretAfterPick.current
+    if (at === null) return
+    caretAfterPick.current = null
+    boxRef.current?.setSelectionRange(at, at)
+  }, [draft])
+
+  const members: Mention[] = conversation.kind === 'group'
+    ? conversation.members.map((id) => ({ id, name: roster[id]?.name ?? id, emoji: roster[id]?.emoji ?? '' }))
+    : []
+  const query = members.length ? mentionQuery(draft, caret) : null
+  const candidates = query && query.start !== dismissedAt
+    ? members.filter((m) => {
+      const q = query.query.toLowerCase()
+      return m.name.toLowerCase().includes(q) || m.id.startsWith(q)
+    }).slice(0, 8)
+    : []
+  const menuOpen = candidates.length > 0
+  // Esc 只关掉那一个 @：删掉它以后再打的 @ 照样弹
+  const queryStart = query?.start ?? null
+  useEffect(() => { if (queryStart === null) setDismissedAt(null) }, [queryStart])
+  const current = Math.min(active, Math.max(candidates.length - 1, 0))
   // 往上翻着看历史时，新消息不该把人拽回底部；换了线程就重新贴底
   const pinned = useRef(true)
   useEffect(() => { pinned.current = true }, [conversation.id])
@@ -80,15 +128,50 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   const submit = () => {
     const text = draft.trim()
     if (!text) return
+    const mentions = picked.filter((m) => stillMentioned(text, m.name)).map((m) => m.id)
     setDraft('')
+    setPicked([])
+    setDismissedAt(null)
     pinned.current = true
-    onSend(text)
+    if (mentions.length) onSend(text, mentions)
+    else onSend(text)
+  }
+
+  const pick = (m: Mention) => {
+    if (!query) return
+    const before = draft.slice(0, query.start)
+    const insert = `@${m.name} `
+    const after = draft.slice(caret).replace(/^ /, '')
+    const at = before.length + insert.length
+    setDraft(before + insert + after)
+    setPicked((p) => (p.some((x) => x.id === m.id) ? p : [...p, m]))
+    setActive(0)
+    setCaret(at)
+    caretAfterPick.current = at
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== 'Enter' || e.shiftKey) return
     // 输入法正在选字时的回车是「上屏」，不是「发送」；Safari 在 compositionend 之后才补发 keyCode 229
     if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    if (menuOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        setActive((current + step + candidates.length) % candidates.length)
+        return
+      }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+        e.preventDefault()
+        pick(candidates[current]!)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setDismissedAt(query!.start)
+        return
+      }
+    }
+    if (e.key !== 'Enter' || e.shiftKey) return
     e.preventDefault()
     submit()
   }
@@ -205,13 +288,42 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         {thinking ? <div className="row from-bot"><div className="bubble typing">•••</div></div> : null}
       </div>
       <footer className="composer">
+        {menuOpen ? (
+          <ul className="mention-menu" id={menuId} role="listbox" aria-label={t('thread.mentionList')}>
+            {candidates.map((m, i) => (
+              <li
+                key={m.id}
+                id={`${menuId}-${i}`}
+                role="option"
+                aria-selected={i === current}
+                className={i === current ? 'active' : undefined}
+                // mousedown 而不是 click：不让输入框先失焦
+                onMouseDown={(e) => { e.preventDefault(); pick(m) }}
+                onMouseEnter={() => setActive(i)}
+              >
+                <span className="mention-emoji">{m.emoji}</span>
+                <span className="mention-name">{m.name}</span>
+                <span className="mention-id">@{m.id}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <textarea
           ref={boxRef}
           rows={1}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value)
+            setCaret(e.target.selectionStart ?? e.target.value.length)
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onKeyDown}
-          placeholder={t('thread.placeholder', { name: conversation.title })}
+          aria-autocomplete={members.length ? 'list' : undefined}
+          aria-controls={menuOpen ? menuId : undefined}
+          aria-activedescendant={menuOpen ? `${menuId}-${current}` : undefined}
+          placeholder={members.length
+            ? t('thread.placeholderGroup', { name: conversation.title })
+            : t('thread.placeholder', { name: conversation.title })}
         />
         {thinking && onStop ? (
           <button className="composer-stop" onClick={onStop} aria-label={t('thread.stop')} title={t('thread.stopTitle')}>■</button>

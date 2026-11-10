@@ -97,6 +97,84 @@ describe('createLLM resilience', () => {
     expect(calls).toBe(1)
   })
 
+  /** 一个永远等不完的退避：只有停止按钮能让这次调用回来。started 在等待真的开始时兑现 */
+  function endlessWait() {
+    let begin!: () => void
+    const started = new Promise<void>((resolve) => { begin = resolve })
+    const waits: number[] = []
+    const sleep = (ms: number) => { waits.push(ms); begin(); return new Promise<void>(() => {}) }
+    return { sleep, started, waits }
+  }
+
+  it.each([
+    ['a Retry-After the provider asked for', () => new Response('slow down', { status: 429, headers: { 'retry-after': '30' } })],
+    ['the backoff after a 503', () => new Response('upstream busy', { status: 503 })],
+    ['the backoff after a network error', () => { throw new TypeError('fetch failed') }],
+  ])('stops at once when the operator stops the turn during %s', async (_name, reply) => {
+    let calls = 0
+    const fakeFetch = (async () => { calls++; return reply() }) as typeof fetch
+    const { sleep, started, waits } = endlessWait()
+    const llm = createLLM(loadConfig({}), fakeFetch, sleep)
+    const stop = new AbortController()
+    const pending = llm.chat(hi, [], { signal: stop.signal })
+    await started
+    stop.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(waits).toHaveLength(1)
+    expect(calls).toBe(1) // 没有再发下一次请求
+  })
+
+  it('does not start a retry wait for a turn that was stopped while the reply was arriving', async () => {
+    const stop = new AbortController()
+    let calls = 0
+    const waits: number[] = []
+    const fakeFetch = (async () => {
+      calls++
+      stop.abort()
+      return new Response('upstream busy', { status: 503 })
+    }) as typeof fetch
+    const llm = createLLM(loadConfig({}), fakeFetch, async (ms) => { waits.push(ms) })
+    await expect(llm.chat(hi, [], { signal: stop.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(waits).toEqual([])
+    expect(calls).toBe(1)
+  })
+
+  it('clears its own retry timer when the turn is stopped', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const fakeFetch = (async () => new Response('slow down', { status: 429, headers: { 'retry-after': '30' } })) as typeof fetch
+      const llm = createLLM(loadConfig({}), fakeFetch) // 真的那个 sleep
+      const stop = new AbortController()
+      const pending = llm.chat(hi, [], { signal: stop.signal })
+      pending.catch(() => {})
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1))
+      stop.abort()
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('still waits out the whole backoff when nobody stops the turn', async () => {
+    let calls = 0
+    const fakeFetch = (async () => {
+      calls++
+      return calls === 1 ? new Response('upstream busy', { status: 503 }) : new Response(okBody())
+    }) as typeof fetch
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const llm = createLLM(loadConfig({}), fakeFetch, () => gate)
+    const stop = new AbortController()
+    const pending = llm.chat(hi, [], { signal: stop.signal })
+    await vi.waitFor(() => expect(calls).toBe(1))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls).toBe(1) // 等待没完，不抢跑
+    release()
+    expect((await pending).content).toBe('fine')
+    expect(calls).toBe(2)
+  })
+
   it('reports token usage, including cached prompt tokens', async () => {
     const fakeFetch = (async () => new Response(okBody({
       usage: { prompt_tokens: 1200, completion_tokens: 80, prompt_tokens_details: { cached_tokens: 1024 } },

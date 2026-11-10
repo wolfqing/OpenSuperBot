@@ -21,6 +21,7 @@
 | token (sign-in) | 令牌 | 登录用的那串 |
 | token (model use) | token | 计费单位不翻：「12,345 个 token」 |
 | group / room | 群聊 / 群 | |
+| mention (@) | 点名 | 群里打 @ 叫某位同事；不说「提及」「艾特」 |
 | thread | 对话 | 不说「线程」「会话」 |
 | AI models | AI 模型 | 设置里管服务商和 key 的那一块 |
 | (model) connection | 连接 | 一家服务商 + 一个 key + 默认模型；没选过的同事用「默认连接」 |

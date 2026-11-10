@@ -42,6 +42,8 @@ export const zhCN: Record<MessageKey, string> = {
   'thread.yesterday': '昨天',
   'thread.openComputer': '打开它的电脑',
   'thread.placeholder': '给 {name} 发消息',
+  'thread.placeholderGroup': '给 {name} 发消息，打 @ 可以点名',
+  'thread.mentionList': '可以点名的同事',
   'thread.stop': '停下',
   'thread.stopTitle': '让它停下手上的事',
   'thread.send': '发送',

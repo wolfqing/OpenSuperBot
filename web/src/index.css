@@ -357,6 +357,21 @@ button.question-option:hover { background: var(--bg-hover); }
   background: transparent; color: var(--text); border: 1px solid var(--border-strong); font-size: 10px;
 }
 .composer .composer-stop:hover { background: var(--bg-hover); }
+/* 群里打 @ 时弹出的同事列表，贴在输入框上沿 */
+.composer { position: relative; }
+.mention-menu {
+  position: absolute; left: 16px; bottom: calc(100% - 8px); z-index: 5;
+  min-width: 220px; max-width: min(320px, calc(100% - 32px)); margin: 0; padding: 4px; list-style: none;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.mention-menu li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer;
+}
+.mention-menu li.active { background: var(--bg-active); }
+.mention-emoji { width: 18px; text-align: center; }
+.mention-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mention-id { margin-left: auto; color: var(--text-faint); font-size: 12px; }
 
 /* ── 电脑上的步骤 ──────────────────────── */
 .activity-chip { width: 100%; border: 1px solid var(--border); border-radius: var(--r-lg); }

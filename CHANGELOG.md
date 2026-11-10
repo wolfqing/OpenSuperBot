@@ -7,6 +7,14 @@ names.
 
 ## [Unreleased]
 
+### Security
+
+- **Only turns you start can change a teammate's standing setup.** Saving or forgetting a rule and creating or
+  stopping a routine used to work in any turn, so text in a webhook payload, a page a routine read, or a
+  teammate's handoff could have left a new routine or removed one of your rules behind. These four tools are now
+  offered only in a turn you started, refused if the model names them anyway in any other turn, and the attempt
+  is logged. Handing work to a teammate still works from any turn.
+
 ### Added
 
 - **A first-run wizard.** A fresh install opens on a few short steps instead of an empty workspace: pick the
@@ -25,19 +33,27 @@ names.
 - **Demo mode says so where you work.** A thread whose teammate runs the scripted demo model shows a banner under
   its header (in a group, naming who) with a button to connect a real model, and the model chip reads "Demo mode"
   instead of the service and `stub`.
+- **Ask one teammate in a group.** Type `@` in a group thread to pick who should answer; only they run a turn,
+  and the chief closes with a dispatch table only when it is named too (named alone, it just answers). For other
+  clients, `POST /api/threads/group:…/messages` takes an optional `mentions` list of teammate ids, and an `@id`
+  written in the text counts the same; display names in the text are not matched. A named id that is not in the
+  group is refused with `400`, and so is a non-empty `mentions` in a direct thread. With no one named, the round
+  is the same as before. Requested in #12.
+
+### Changed
+
+- The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
+  computer's live screen in the panel. The conversation is the built-in scripted demo.
 
 ### Fixed
 
+- **Stop works while a teammate is waiting to retry.** When a provider answered `429` or `503` and the gateway
+  was waiting before the next try (up to 30 seconds if the provider sent `Retry-After`), pressing stop did
+  nothing until that wait was over. The wait now ends the moment you stop the turn, and no further request is
+  made. This applies to OpenAI-compatible and Responses connections; Claude connections already behaved this
+  way. Reported in #22.
 - In demo mode, a link followed by Chinese punctuation is opened without the punctuation, and Chinese requests to
   send, email or reply are held for approval like English ones.
-
-### Security
-
-- **Only turns you start can change a teammate's standing setup.** Saving or forgetting a rule and creating or
-  stopping a routine used to work in any turn, so text in a webhook payload, a page a routine read, or a
-  teammate's handoff could have left a new routine or removed one of your rules behind. These four tools are now
-  offered only in a turn you started, refused if the model names them anyway in any other turn, and the attempt
-  is logged. Handing work to a teammate still works from any turn.
 
 ## [0.5.0] - 2026-11-08
 

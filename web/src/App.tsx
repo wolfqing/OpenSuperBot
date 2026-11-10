@@ -383,7 +383,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
           messages={messages}
           thinking={thinking}
           roster={roster}
-          onSend={(text) => { if (threadId) sendMessage(threadId, text).catch(guard) }}
+          onSend={(text, mentions) => { if (threadId) sendMessage(threadId, text, mentions).catch(guard) }}
           onDecide={(approvalId, decision, remember, items) => {
             resolveApproval(approvalId, decision, remember, items).catch(guard)
           }}

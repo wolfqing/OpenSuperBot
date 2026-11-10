@@ -95,6 +95,23 @@ describe('OpenAI Responses API', () => {
     await expect(createLLM(target, fetchImpl).chat([{ role: 'user', content: 'go' }], tools)).rejects.toThrow(/cut off \(max_output_tokens\)/)
   })
 
+  it('stops at once when the operator stops the turn during a retry wait', async () => {
+    let calls = 0
+    const fakeFetch = (async () => {
+      calls++
+      return new Response('slow down', { status: 429, headers: { 'retry-after': '30' } })
+    }) as typeof fetch
+    let begin!: () => void
+    const started = new Promise<void>((resolve) => { begin = resolve })
+    const llm = createLLM(target, fakeFetch, () => { begin(); return new Promise<void>(() => {}) })
+    const stop = new AbortController()
+    const pending = llm.chat([{ role: 'user', content: 'hi' }], [], { signal: stop.signal })
+    await started
+    stop.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(calls).toBe(1)
+  })
+
   it('surfaces a failed response as an error', async () => {
     const { fetchImpl } = fakeResponses([{ status: 'failed', error: { message: 'server overloaded' } }])
     await expect(createLLM(target, fetchImpl).chat([{ role: 'user', content: 'go' }], [])).rejects.toThrow(/server overloaded/)
