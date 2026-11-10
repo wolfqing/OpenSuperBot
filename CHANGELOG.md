@@ -40,6 +40,11 @@ names.
   group is refused with `400`, and so is a non-empty `mentions` in a direct thread. With no one named, the round
   is the same as before. Requested in #12.
 
+- **Groundwork for the desktop app.** The gateway can run inside the app: it tells the app when it is ready and on
+  which port, shuts down in order when the app asks (routines stop, computers and their Chrome close), downloads
+  the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's runtime.
+  Run from source, nothing changes.
+
 ### Changed
 
 - The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local

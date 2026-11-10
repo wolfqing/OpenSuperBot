@@ -69,7 +69,12 @@ export type LocalBackendOptions = {
   /** 测试里换掉找/下载浏览器 */
   resolveBrowser?: () => Promise<string>
   /** 命令行：按同事问「开了吗」，开了就在系统沙箱里跑。没有沙箱 = 没有命令行。 */
-  shell?: { enabled: (botId: string) => boolean; sandbox: Sandbox | null }
+  shell?: {
+    enabled: (botId: string) => boolean
+    sandbox: Sandbox | null
+    /** 命令行里的 node 从哪来、沙箱额外放行读哪些目录（桌面版用；源码版不给） */
+    node?: { nodeDir: string; readable: string[] }
+  }
 }
 
 /**
@@ -111,7 +116,7 @@ export function createLocalBackend(opts: LocalBackendOptions): ComputerBackend {
       const shell = opts.shell && sandbox ? {
         enabled: () => opts.shell!.enabled(botId),
         run: (cmd: string, timeoutMs?: number, signal?: AbortSignal) =>
-          runSandboxed(cmd, { sandbox, confinement: { workspace, tmp, dataDir: opts.dataDir }, timeoutMs, signal }),
+          runSandboxed(cmd, { sandbox, confinement: { workspace, tmp, dataDir: opts.dataDir, ...opts.shell!.node }, timeoutMs, signal }),
       } : undefined
       const computer = createLocalComputer({ workspaceDir: workspace, profileDir, executablePath, launch: opts.launch, shell })
       const tracked: BotComputer = {

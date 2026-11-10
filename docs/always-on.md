@@ -137,6 +137,7 @@ curl -X POST -H 'Content-Type: application/json' -H 'X-OpenSuperBot-Key: <key>' 
 | `OPENSUPERBOT_BROWSER_MIRROR` | *(official)* | Download host for that browser; `https://cdn.npmmirror.com/binaries/playwright` works from China |
 | `OPENSUPERBOT_BOT_MEMORY_MB` / `OPENSUPERBOT_BOT_CPUS` | `2048` / `2` | Per-computer limits (Docker computers only) |
 | `OPENSUPERBOT_VERSION` | *(none)* | The version Settings → About shows; a source checkout shows "run from source" without it |
+| `OPENSUPERBOT_LOG_FILE` | *(none)* | Where whoever runs the gateway saves its output; Settings → About shows it. The gateway itself only prints |
 
 ## Upgrading
 

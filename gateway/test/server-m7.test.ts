@@ -83,8 +83,8 @@ describe('/api/settings', () => {
       runtime: { node: process.versions.node, platform: process.platform, arch: process.arch },
       computers: 'local',
     })
-    const packaged = setup({ env: { OPENSUPERBOT_VERSION: ' 0.6.0 ' } })
-    expect(await (await packaged.call('GET', '/api/about')).json()).toMatchObject({ version: '0.6.0', computers: null })
+    const packaged = setup({ env: { OPENSUPERBOT_VERSION: ' 0.6.0 ', OPENSUPERBOT_LOG_FILE: '/logs/gateway.log' } })
+    expect(await (await packaged.call('GET', '/api/about')).json()).toMatchObject({ version: '0.6.0', logs: '/logs/gateway.log', computers: null })
   })
 
   it('shows the defaults and where each value comes from', async () => {

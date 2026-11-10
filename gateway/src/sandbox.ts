@@ -23,6 +23,10 @@ export type Confinement = {
   /** 整个数据目录：沙箱里看不见（通常在家目录下，已经被遮住；放在别处时单独遮） */
   dataDir: string
   home?: string
+  /** 命令行里 `node` 从哪个目录来（放在 PATH 最前）；不给 = 网关自己这个 node 所在的目录 */
+  nodeDir?: string
+  /** 额外只读放行的目录（桌面版：node 小脚本所在的目录和 App 包），和工具链目录一样处理 */
+  readable?: string[]
   /** 测试里换掉「这个目录存在吗」 */
   exists?: (p: string) => boolean
 }
@@ -93,7 +97,7 @@ function layout(c: Confinement): Resolved {
     home, dataDir,
     workspace: real(c.workspace),
     tmp: real(c.tmp),
-    toolchains: TOOLCHAIN_DIRS.map((d) => join(home, d)).filter((d) => exists(d)),
+    toolchains: [...TOOLCHAIN_DIRS.map((d) => join(home, d)).filter((d) => exists(d)), ...(c.readable ?? []).map(real)],
     // 数据目录在家目录下就已经一起遮住了；在别处才单独遮
     hiddenDataDir: dataDir === home || dataDir.startsWith(home + '/'),
   }
@@ -150,7 +154,7 @@ function shellTimeout(requested: number | undefined): number {
  * 命令看到的环境：只给白名单，HOME 和 TMPDIR 都指到它自己的地方，宿主用户的环境变量一个都不漏过去。
  * PATH 里先放网关自己这个 node 所在的目录：用 nvm 之类装的 node 不在系统路径上，没有这一条 bot 就没有 node。
  */
-export function sandboxEnv(c: Confinement, base: NodeJS.ProcessEnv = process.env, nodeDir = dirname(process.execPath)): NodeJS.ProcessEnv {
+export function sandboxEnv(c: Confinement, base: NodeJS.ProcessEnv = process.env, nodeDir = c.nodeDir ?? dirname(process.execPath)): NodeJS.ProcessEnv {
   return {
     PATH: `${nodeDir}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: real(c.workspace),
