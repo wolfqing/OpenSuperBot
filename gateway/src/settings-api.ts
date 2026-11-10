@@ -44,6 +44,21 @@ export function mountSettings(app: Hono, deps: SettingsDeps & { db: Db; /** 启�
   }
 
   app.get('/api/settings', (c) => c.json(view()))
+
+  /**
+   * 设置页的「关于」：版本、数据放在哪、日志去哪、跑在什么上面。
+   * 版本由打包的人经 OPENSUPERBOT_VERSION 给（桌面壳会设）；源码版没有可靠的版本号，回 null，界面照实说是源码版。
+   * 日志：网关只往 stdout 打；桌面壳把它接到文件里，经 OPENSUPERBOT_LOG_FILE 告诉网关在哪。
+   */
+  app.get('/api/about', (c) => c.json({
+    version: env.OPENSUPERBOT_VERSION?.trim() || null,
+    dataDir,
+    // 桌面版端口被占时会换一个（并记住）：webhook 地址、隧道都要用这个
+    port: startedWith.port,
+    logs: env.OPENSUPERBOT_LOG_FILE?.trim() || 'stdout',
+    runtime: { node: process.versions.node, platform: process.platform, arch: process.arch },
+    computers: deps.runningKind ?? null,
+  }))
   app.get('/api/settings/providers', (c) => c.json(PROVIDERS))
 
   app.put('/api/settings', async (c) => {

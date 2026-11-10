@@ -76,6 +76,17 @@ describe('/api/settings', () => {
     return { db, dataDir, call, seen }
   }
 
+  it('says what the settings page shows under About, and the version only when the packager gave one', async () => {
+    const plain = setup({ running: 'local' })
+    expect(await (await plain.call('GET', '/api/about')).json()).toEqual({
+      version: null, dataDir: plain.dataDir, port: 4747, logs: 'stdout',
+      runtime: { node: process.versions.node, platform: process.platform, arch: process.arch },
+      computers: 'local',
+    })
+    const packaged = setup({ env: { OPENSUPERBOT_VERSION: ' 0.6.0 ', OPENSUPERBOT_LOG_FILE: '/logs/gateway.log' } })
+    expect(await (await packaged.call('GET', '/api/about')).json()).toMatchObject({ version: '0.6.0', logs: '/logs/gateway.log', computers: null })
+  })
+
   it('shows the defaults and where each value comes from', async () => {
     const { call } = setup()
     const res = await call('GET', '/api/settings')
@@ -241,6 +252,7 @@ describe('/api/setup', () => {
     const s = setup({ docker: true })
     expect(await get(s)).toEqual({
       needsSetup: true,
+      chiefId: 'chief',
       demo: false,
       computers: {
         kind: 'local', choice: 'auto',

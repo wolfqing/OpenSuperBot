@@ -21,6 +21,7 @@ import { detectSandbox, sandboxHint, sandboxMissing, sandboxSelfCheck } from './
 import { createScheduler, type Scheduler } from './scheduler.js'
 import { seedGroup, seedTeammates } from './seed.js'
 import { createApp } from './server.js'
+import { currentRuntime, onShutdown, reportReady, sandboxNode } from './hosting.js'
 import { currentConfig, readSavedSettings, resolveSettings } from './settings.js'
 import { serveWeb } from './web.js'
 
@@ -60,6 +61,9 @@ const llmFor = (botId: string) => {
 // 同事的电脑是什么做的：有 Docker 用容器，没有就用本机模式（宿主上的浏览器 + 一个文件夹）
 const docker = new Docker()
 const sandbox = detectSandbox()
+// 桌面壳托管时（Electron）：沙箱里的 node 是数据目录里的一个小脚本；源码版照旧用网关自己这个 node
+const runtime = currentRuntime()
+const sandboxedNode = sandbox && runtime.electron ? sandboxNode(runtime, config.dataDir) : undefined
 // 本机模式的浏览器：第一次要电脑时和向导里「先下载」共用这一个，不会两头同时下
 const browser = createBrowserProvisioner({
   dataDir: config.dataDir,
@@ -79,7 +83,7 @@ const { backend, why: backendWhy, reason: backendReason } = await chooseBackend(
     resolveBrowser: () => browser.ensure(),
     log: (line) => console.log(`[gateway] ${line}`),
     // 命令行按同事开关（存数据库）；开了也只在系统沙箱里跑，没沙箱就没有命令行
-    shell: { enabled: (botId) => botShellEnabled(db, botId), sandbox },
+    shell: { enabled: (botId) => botShellEnabled(db, botId), sandbox, ...(sandboxedNode ? { node: sandboxedNode } : {}) },
   }),
   dockerReachable: () => dockerReachable(docker),
   dockerImageReady: () => botImageReady(docker),
@@ -108,7 +112,10 @@ const gateway = createApp({
     reason: backendReason,
     sandbox: sandbox ? { available: true } : { available: false, why: sandboxHint(), whyCode: sandboxMissing() },
     checkSandbox: (botId) => sandbox
-      ? sandboxSelfCheck(sandbox, { workspace: join(config.dataDir, 'workspaces', botId), tmp: join(config.dataDir, 'bots', botId, 'tmp'), dataDir: config.dataDir })
+      ? sandboxSelfCheck(sandbox, {
+        workspace: join(config.dataDir, 'workspaces', botId), tmp: join(config.dataDir, 'bots', botId, 'tmp'), dataDir: config.dataDir,
+        ...sandboxedNode,
+      })
       : Promise.resolve({ ok: false as const, why: sandboxHint() }),
   },
   chiefId: config.chiefId,
@@ -190,7 +197,7 @@ mountScreenProxy(app, { knownBot })
 // pnpm build 之后网关直接托管前端：一个端口、一个进程；dev 下前端走 Vite（5173）
 const servingWeb = serveWeb(app, config.webDist)
 
-serve({
+const server = serve({
   fetch: app.fetch,
   port: config.port,
   hostname: config.host,
@@ -202,6 +209,8 @@ serve({
     ` · bots: ${bots.join(', ') || '(none)'} · routines: ${schedulerProxy.size()}` +
     (servingWeb ? ' · serving the built UI' : ''),
   )
+  // 桌面壳在等这一声（端口可能是它换过的）；源码版没有壳，什么都不发
+  reportReady(runtime, info.port)
   // 常驻服务的日志可能落盘，设了 OPENSUPERBOT_QUIET_TOKEN 就不把令牌写进日志
   if (process.env.OPENSUPERBOT_QUIET_TOKEN) {
     console.log(`[gateway] sign in → ${base}/auth?token=<the token in ${join(config.dataDir, 'auth-token')}>`)
@@ -229,10 +238,10 @@ if (config.idleStopMinutes > 0) {
   timer.unref()
 }
 
-// bot 的电脑该长期在线：退出只断 CDP 连接，容器留着（也保住浏览器登录态）
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    schedulerProxy.stopAll()
-    void pool.disposeAll().finally(() => process.exit(0))
-  })
-}
+// 收摊：Ctrl-C、SIGTERM、桌面壳的 stop 都走这里。先停调度和接新连接，再收电脑（本机 Chrome 跟着关）；
+// bot 的 Docker 电脑该长期在线：只断 CDP 连接，容器留着（也保住浏览器登录态）
+onShutdown(runtime, async () => {
+  schedulerProxy.stopAll()
+  server.close()
+  await pool.disposeAll()
+}, { log: (line) => console.log(`[gateway] ${line}`) })

@@ -4,6 +4,7 @@ import type {
 } from '../types'
 import { useT, type MessageKey, type T } from '../i18n'
 import { isNotice, noticeText } from '../i18n/describe'
+import { BotAvatar, conversationSeed } from './BotAvatar'
 
 /**
  * 单聊就是那位同事的状态。群只说「有人在干活」：等你、卡住、刚干完说的是某一位同事，
@@ -72,7 +73,7 @@ function preview(c: Conversation, t: T): string {
   }
 }
 
-export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBot, onModels }: {
+export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBot, onModels, onSettings }: {
   conversations: Conversation[]
   selectedId: string | null
   statuses: Record<string, BotStatus>
@@ -80,6 +81,8 @@ export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBo
   onNewBot: () => void
   /** 打开「AI 模型」；老网关没有这块就不传，按钮也不出现 */
   onModels?: () => void
+  /** 打开设置页；老网关没有设置路由就不传 */
+  onSettings?: () => void
 }) {
   const t = useT()
   const stateText = (state: BotStatus) => { const key = STATE_TEXT[state]; return key ? t(key) : undefined }
@@ -89,6 +92,9 @@ export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBo
         <span>OpenSuperBot</span>
         {onModels ? (
           <button className="sidebar-new sidebar-models" onClick={onModels} aria-label={t('sidebar.models')} title={t('sidebar.models')}>AI</button>
+        ) : null}
+        {onSettings ? (
+          <button className="sidebar-new" onClick={onSettings} aria-label={t('sidebar.settings')} title={t('sidebar.settings')}>⚙</button>
         ) : null}
         <button className="sidebar-new" onClick={onNewBot} aria-label={t('sidebar.hire')} title={t('sidebar.hire')}>+</button>
       </div>
@@ -104,7 +110,7 @@ export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBo
             className={`sidebar-item${c.id === selectedId ? ' selected' : ''}`}
             onClick={() => onSelect(c.id)}
           >
-            <span className="avatar" data-state={state} title={stateText(state)}>{c.emoji}</span>
+            <BotAvatar seed={conversationSeed(c)} emoji={c.emoji} size="lg" state={state} title={stateText(state)} />
             <span className="sidebar-text">
               <span className="sidebar-name">
                 {c.title}{state === 'thinking' ? ' …' : ''}

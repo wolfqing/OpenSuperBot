@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, win32 } from 'node:path'
 import { CodedError } from './coded-error.js'
+import { currentRuntime, nodeScriptEnv, type Runtime } from './hosting.js'
 
 /**
  * 本机模式要一个 Chromium 系浏览器。顺序：操作者指定的 → 机器上装好的（真 Chrome 优先，登录页对它最宽容）→
@@ -120,16 +121,19 @@ export async function installBrowser(dir: string, opts: {
   onProgress?: (p: DownloadProgress) => void
   spawnImpl?: SpawnLike
   cliPath?: string
+  /** 跑在什么里：Electron 里拿 execPath 跑脚本要带 ELECTRON_RUN_AS_NODE=1 */
+  runtime?: Runtime
 } & FsDeps = {}): Promise<string> {
   const log = opts.log ?? (() => {})
   // cli.js 不在 playwright-core 的 exports 里，直接 resolve 会报 ERR_PACKAGE_PATH_NOT_EXPORTED：从 package.json 找到包目录再拼
   const cli = opts.cliPath ?? join(dirname(createRequire(import.meta.url).resolve('playwright-core/package.json')), 'cli.js')
-  const env: NodeJS.ProcessEnv = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: dir }
+  const rt = opts.runtime ?? currentRuntime()
+  const env: NodeJS.ProcessEnv = nodeScriptEnv(rt, { ...process.env, PLAYWRIGHT_BROWSERS_PATH: dir })
   if (opts.mirror) env.PLAYWRIGHT_DOWNLOAD_HOST = opts.mirror
   const spawnImpl = opts.spawnImpl ?? (spawn as unknown as SpawnLike)
   log(`downloading a browser for local teammates into ${dir}${opts.mirror ? ` via ${opts.mirror}` : ''} …`)
   await new Promise<void>((resolvePromise, reject) => {
-    const child = spawnImpl(process.execPath, [cli, 'install', 'chromium', '--no-shell'], { env, stdio: 'pipe' })
+    const child = spawnImpl(rt.execPath, [cli, 'install', 'chromium', '--no-shell'], { env, stdio: 'pipe' })
     let tail = ''
     let partial = ''
     let item: string | null = null

@@ -306,9 +306,11 @@ function findTeammate(text: string): string | null {
 
 /** 最后一条用户消息里提到的网址，用来触发 stub 的浏览器脚本。 */
 function findUrl(messages: ChatMsg[]): string | null {
-  const match = lastUserText(messages).match(/\bhttps?:\/\/\S+|\b[a-z0-9-]+\.(?:com|org|net|io|dev|ai)\b/i)
+  // 中文标点（全角逗号、句号……）紧贴着网址也不算网址的一部分；句末的英文标点同理
+  const match = lastUserText(messages).match(/\bhttps?:\/\/[^\s\u3000-\u303f\uff00-\uffef]+|\b[a-z0-9-]+\.(?:com|org|net|io|dev|ai)\b/i)
   if (!match) return null
-  return match[0].startsWith('http') ? match[0] : `https://${match[0]}`
+  const url = match[0].replace(/[.,;:!?)]+$/, '')
+  return url.startsWith('http') ? url : `https://${url}`
 }
 
 /**
@@ -441,7 +443,7 @@ function createStubLLM(): LLM {
           rule: text.replace(/^\s*(from now on|always)\s*,?\s*/i, '').trim(),
         })
       }
-      if (/\b(send|email|reply|replies|post|publish)\b/.test(lower)) {
+      if (/\b(send|email|reply|replies|post|publish)\b|发送|邮件|回复|发布/.test(lower)) {
         return stubToolTurn('hold_for_approval', {
           action: 'send the 4 queued drafts',
           detail: 'Four replies are drafted and ready to go out.',

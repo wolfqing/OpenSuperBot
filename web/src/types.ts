@@ -238,6 +238,56 @@ export type BrowserStatus =
   | { state: 'downloading'; item: string | null; percent: number | null; totalMiB: number | null }
   | { state: 'failed'; error: string }
 
+/** 自动选电脑时为什么落在这一种（网关的 BackendWhy） */
+export type BackendWhy = 'chosen' | 'docker_running' | 'docker_not_running' | 'docker_image_missing' | 'no_local_mode'
+
+/** /api/setup：要不要出首次启动向导，以及同事的电脑有什么可用 */
+export type SetupInfo = {
+  needsSetup: boolean
+  /** 向导最后一步把人领进它的对话；老网关不给就当 chief */
+  chiefId?: string
+  demo: boolean
+  computers: {
+    kind: 'local' | 'docker'
+    choice: 'auto' | 'docker' | 'local'
+    why?: BackendWhy
+    reason?: string
+    docker: { reachable: boolean; imageReady: boolean | null }
+    browser: BrowserStatus
+    download: { approxMB: number; onDiskMB: number }
+    browserMirror: { current: string; suggested: { url: string; owner: string } | null }
+    sandbox: { available: boolean; why?: string; whyCode?: SandboxMissing }
+  }
+}
+
+/** /api/settings：生效的设置、每项来自哪（env 的在界面上锁定）、改了哪些要重启网关 */
+export type SettingsView = {
+  values: {
+    provider: string
+    baseURL: string
+    model: string
+    vision: boolean
+    language: '' | 'en' | 'zh-CN'
+    computers: 'auto' | 'docker' | 'local'
+    browserMirror: string
+    checkUpdates: boolean
+  }
+  sources: Record<string, 'env' | 'saved' | 'default'>
+  apiKey: { set: boolean; masked: string; source: 'env' | 'file' | 'none' }
+  needsRestart: string[]
+}
+
+/** /api/about：设置页的「关于」。version 为 null = 源码版；logs 'stdout' = 打在运行网关的终端里 */
+export type AboutInfo = {
+  version: string | null
+  dataDir: string
+  /** 网关在听的端口（老网关不给） */
+  port?: number
+  logs: string
+  runtime: { node: string; platform: string; arch: string }
+  computers: 'local' | 'docker' | null
+}
+
 /** 模型接口的说法：chat = OpenAI 兼容；anthropic = Claude 原生；responses = OpenAI 的 Responses */
 export type LlmApi = 'chat' | 'anthropic' | 'responses'
 

@@ -9,6 +9,7 @@
     "dev": "pnpm --parallel --filter @opensuperbot/gateway --filter @opensuperbot/web dev",
     "build": "pnpm --filter @opensuperbot/web build && pnpm --filter @opensuperbot/gateway build",
     "start": "pnpm --filter @opensuperbot/gateway start",
+    "desktop": "pnpm build && pnpm --filter @opensuperbot/desktop build && pnpm --filter @opensuperbot/desktop start",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --workspace-concurrency=1 test"
   },
@@ -19,6 +20,7 @@
     "ignoredBuiltDependencies": [
       "better-sqlite3",
       "cpu-features",
+      "electron",
       "protobufjs",
       "ssh2"
     ]

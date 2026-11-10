@@ -14,7 +14,7 @@ import { canMessage, denyReason, type A2ARules } from './a2a.js'
 import { authMiddleware, loginHandler } from './auth.js'
 import { createBot } from './bots.js'
 import {
-  type BotRow, type Db, ensureDmThread, getMessage, insertMessage, listBotsWithLastMessage, listConversations, listMessages, type MessageRow, recordUsage, setBotShell, threadMembers, updateMessagePayload, usageSince, waitsOnOperator,
+  type BotRow, type Db, ensureDmThread, getMessage, insertMessage, listBotsWithLastMessage, listConversations, listMessages, type MessageRow, pendingCount, recordUsage, setBotShell, threadMembers, updateMessagePayload, usageSince, waitsOnOperator,
 } from './db.js'
 import { createHub, type GatewayEvent, type Hub, type Presence } from './hub.js'
 import type { LLM } from './llm.js'
@@ -332,7 +332,7 @@ export function createApp(deps: AppDeps): GatewayApp {
   if (deps.settings) mountSettings(app, { ...deps.settings, db, ...(deps.computers ? { runningKind: deps.computers.kind } : {}) })
   if (deps.settings) mountConnections(app, { ...deps.settings, db })
   if (deps.settings && deps.setup) {
-    mountSetup(app, { ...deps.settings, ...deps.setup, db, hub, ...(deps.computers ? { computers: deps.computers } : {}) })
+    mountSetup(app, { ...deps.settings, ...deps.setup, db, hub, chiefId, ...(deps.computers ? { computers: deps.computers } : {}) })
   }
 
   const botById = (id: string) => db.prepare('SELECT * FROM bots WHERE id = ?').get(id) as BotRow | undefined
@@ -741,6 +741,16 @@ export function createApp(deps: AppDeps): GatewayApp {
   app.get('/api/bots', (c) => c.json(listBotsWithLastMessage(db)))
 
   app.get('/api/conversations', (c) => c.json(listConversations(db)))
+
+  /**
+   * 一眼能看的三个数：几位同事在干活、几件事等着你、几条例行任务开着。
+   * 桌面版拿它画托盘菜单和 Dock 角标，退出前也用它问「还有活在跑，确定退？」
+   */
+  app.get('/api/summary', (c) => {
+    const ids = (db.prepare('SELECT id FROM bots').all() as { id: string }[]).map((r) => r.id)
+    const routines = (db.prepare('SELECT COUNT(*) AS n FROM routines WHERE enabled = 1').get() as { n: number }).n
+    return c.json({ working: ids.filter((id) => presenceOf(id) === 'thinking').length, waiting: pendingCount(db), routines })
+  })
 
   app.get('/api/bots/:botId/computer', async (c) => {
     const botId = c.req.param('botId')

@@ -17,6 +17,25 @@ names.
 
 ### Added
 
+- **A first-run wizard.** A fresh install opens on a few short steps instead of an empty workspace: pick the
+  language, pick an AI service from cards (each with a link to where its key is made), paste the key and test it,
+  then pick a model from the ones the service offers. A failed test says what went wrong and what to try next.
+  It then shows what your teammates' computer has to work with (the browser it found, or a download with its size,
+  progress and a mirror in China; Docker; the sandbox for commands) and ends in Chief's thread with three example
+  tasks to try. Every step before the computer check can switch to demo mode instead. Installs set up with
+  environment variables never see it.
+- **A settings page**, behind the gear in the sidebar: the default model with a way into the AI models dialog
+  (or, in demo mode, a button to connect a real model), the language, which computer teammates get (with why
+  automatic picked the one in use, and a note when a change needs a restart), the browser and where it downloads
+  from, and an About section with the version, the data folder, where the logs go and what it runs on. Settings
+  pinned by environment variables are shown read-only with the variable to change. The setup can be run again
+  from here, keeping the saved key when you pick the same service, and closed half way.
+- **Demo mode says so where you work.** A thread whose teammate runs the scripted demo model shows a banner under
+  its header (in a group, naming who) with a button to connect a real model, and the model chip reads "Demo mode"
+  instead of the service and `stub`.
+- **Links to a thread.** `#thread=<id>` at the end of the UI's address opens that conversation; a link to one that
+  is gone opens the first. `GET /api/summary` gives how many teammates are working, how much waits on you and how
+  many routines are on.
 - **Ask one teammate in a group.** Type `@` in a group thread to pick who should answer; only they run a turn,
   and the chief closes with a dispatch table only when it is named too (named alone, it just answers). For other
   clients, `POST /api/threads/group:…/messages` takes an optional `mentions` list of teammate ids, and an `@id`
@@ -40,8 +59,26 @@ names.
   size. CJK radical look-alikes and Latin ligatures in the extracted text are replaced by the real characters, so
   the text can be searched. This adds one dependency, `unpdf`, which has no native code.
 
+- **Groundwork for the desktop app.** The gateway can run inside the app: it tells the app when it is ready and on
+  which port, shuts down in order when the app asks (routines stop, computers and their Chrome close), downloads
+  the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's runtime.
+  Run from source, nothing changes. A first desktop shell (`desktop/`, Electron 44.9.3) starts the gateway, signs
+  its window in without a sign-in link, restarts a crashed gateway, and shows an error page with the log when it
+  cannot start. Its window shows only the gateway's UI: other sites open in your browser, the gateway's own pages
+  open in an app window, signed in, other kinds of links are blocked, attachments download to your Downloads
+  folder without overwriting, and pages may only show notifications and write to the clipboard. If port 4747 is
+  taken (a gateway run from source, say) it takes the next free one and keeps it, so webhook addresses stay
+  put; Settings → About shows the port. Closing the window keeps it running, with a menu bar icon and a Dock badge
+  for what waits on you; approvals, questions and sign-in requests notify while the window is away; quitting from
+  the app asks first while work or routines are running. There is no
+  download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
+
 ### Changed
 
+- **Teammates have faces instead of emoji.** Each avatar is a small coloured shape with a pair of eyes, picked
+  from the teammate's id so it is the same everywhere. It acts out the teammate's state — bobbing while working,
+  hopping when it waits on you, shaking its head when stuck, smiling when done — and holds still when your system
+  asks for reduced motion. The README screenshots are retaken with them.
 - Screenshots are served with `X-Content-Type-Options: nosniff`, like uploaded files.
 - The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
   computer's live screen in the panel. The conversation is the built-in scripted demo.
@@ -53,6 +90,8 @@ names.
   nothing until that wait was over. The wait now ends the moment you stop the turn, and no further request is
   made. This applies to OpenAI-compatible and Responses connections; Claude connections already behaved this
   way. Reported in #22.
+- In demo mode, a link followed by Chinese punctuation is opened without the punctuation, and Chinese requests to
+  send, email or reply are held for approval like English ones.
 
 ## [0.5.0] - 2026-11-08
 

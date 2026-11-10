@@ -9,7 +9,7 @@ const REGIONS: ProviderPreset['region'][] = ['cn', 'global', 'local', 'custom']
 const APIS: LlmApi[] = ['chat', 'anthropic', 'responses']
 
 /** 有专门说明的服务商（条款、该用哪种 key） */
-const NOTES: Partial<Record<string, MessageKey>> = {
+export const NOTES: Partial<Record<string, MessageKey>> = {
   anthropic: 'models.note.anthropic',
   openai: 'models.note.openai',
   gemini: 'models.note.gemini',
@@ -35,7 +35,7 @@ export function checkText(t: T, r: CheckResult, model: string): string {
 export const fieldText = (t: T, e: FieldError): string => (t(`models.field.${e.code}` as MessageKey) as string | undefined) ?? e.code
 
 /** 测试结果一行：成功绿、失败红；失败时附上服务商的原话，方便查 */
-function CheckLine({ result, model }: { result: CheckResult | 'testing' | undefined; model: string }) {
+export function CheckLine({ result, model }: { result: CheckResult | 'testing' | undefined; model: string }) {
   const t = useT()
   if (!result) return null
   if (result === 'testing') return <div className="conn-check">{t('models.form.testing')}</div>

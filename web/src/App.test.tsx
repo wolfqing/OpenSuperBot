@@ -26,15 +26,27 @@ function mockGateway(opts: {
   computerGate?: Promise<void>
   /** 设置里存的界面语言；不给 = 网关没有设置路由（老网关） */
   language?: string
+  /** /api/setup 的回答；不给 = 老网关，没有向导 */
+  setup?: unknown
+  /** /api/connections 的回答；不给 = 老网关 */
+  connections?: unknown
 } = {}) {
   const calls: string[] = []
-  const fetchMock = vi.fn(async (input: string | URL | Request) => {
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     calls.push(url)
+    if (init?.method === 'POST') calls.push(`POST ${url} ${String(init.body ?? '')}`)
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
     if (url === '/api/session') return json({ ok: opts.session === undefined }, opts.session ?? 200)
     if (url === '/api/conversations') return json(opts.conversations ?? [conversation({})])
     if (url === '/api/bots') return json([])
+    if (url === '/api/setup' && opts.setup) return json(opts.setup)
+    if (url === '/api/connections' && opts.connections) return json(opts.connections)
+    if (url === '/api/settings/providers' && opts.connections) return json([])
+    if (url === '/api/about' && opts.setup) return json({ version: null, dataDir: '/d', logs: 'stdout', runtime: { node: '24', platform: 'darwin', arch: 'arm64' }, computers: 'local' })
+    if (url === '/api/settings' && opts.setup && opts.language === undefined) {
+      return json({ values: { model: 'grok-4.7', language: '', computers: 'auto', browserMirror: '' }, sources: {}, apiKey: { set: true, masked: 'x', source: 'file' }, needsRestart: [] })
+    }
     if (url === '/api/settings' && opts.language !== undefined) {
       return opts.session === 401 ? json({ error: 'sign in' }, 401) : json({ values: { language: opts.language } })
     }
@@ -249,5 +261,108 @@ describe('App', () => {
     })
     await act(async () => { gates['/api/threads/dm:researcher/messages']!([]) })
     await waitFor(() => expect(document.querySelector('.thread-scroll')!.textContent).toContain('final reply'))
+  })
+
+  it('opens the first-run wizard when the gateway asks for it, and lands in Chief’s thread with the example sent', async () => {
+    const calls = mockGateway({
+      conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })],
+      setup: {
+        needsSetup: true, chiefId: 'chief', demo: false,
+        computers: {
+          kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+          browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+          browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+        },
+      },
+    })
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+    expect(document.querySelector('.sidebar')).toBeNull()
+    await act(async () => { screen.getByRole('button', { name: 'Just look around (demo mode)' }).click() })
+    await act(async () => { (await screen.findByRole('button', { name: 'Continue' })).click() })
+    await act(async () => { screen.getByRole('button', { name: /Every morning at 9/ }).click() })
+    await waitFor(() => expect(document.querySelector('.sidebar')).not.toBeNull())
+    await waitFor(() => expect(calls).toContain(
+      `POST /api/threads/dm%3Achief/messages ${JSON.stringify({ text: 'Every morning at 9, give me a short summary of the tech news.' })}`,
+    ))
+    expect(document.querySelector('.thread-header')?.textContent).toContain('Chief')
+  })
+
+  it('skips the wizard once the gateway is set up', async () => {
+    mockGateway({ setup: { needsSetup: false, demo: false, computers: {} } })
+    render(<App />)
+    await screen.findAllByText('Scout')
+    await act(async () => {})
+    expect(screen.queryByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeNull()
+  })
+
+  it('opens settings from the sidebar, and can run the setup again and close it', async () => {
+    const computers = {
+      kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+      browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+      browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+    }
+    mockGateway({ setup: { needsSetup: false, chiefId: 'chief', demo: false, computers } })
+    render(<App />)
+    await ready()
+    await act(async () => { (await screen.findByRole('button', { name: 'Settings' })).click() })
+    expect(await screen.findByText('Run from source (no version number)')).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Run the setup again' }).click() })
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Close the setup' }).click() })
+    await waitFor(() => expect(document.querySelector('.sidebar')).not.toBeNull())
+  })
+
+  it('marks a thread whose teammate runs the demo model, and connects a real model from there', async () => {
+    const connection = (model: string) => ({
+      connections: [{ id: 'main', name: '', provider: '', api: 'chat', baseURL: 'https://api.x.ai/v1', model, vision: false, builtIn: true, key: { set: false, masked: '', source: 'none' }, locked: [] }],
+      bots: {},
+    })
+    const computers = {
+      kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+      browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+      browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+    }
+    mockGateway({ setup: { needsSetup: false, chiefId: 'chief', demo: true, computers }, connections: connection('stub') })
+    render(<App />)
+    await ready()
+    expect(await screen.findByText(/Replies here are scripted/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Demo mode' })).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Connect a real model' }).click() })
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+  })
+
+  it('shows no demo banner on a real model', async () => {
+    mockGateway({ connections: {
+      connections: [{ id: 'main', name: '', provider: 'xai', api: 'responses', baseURL: 'https://api.x.ai/v1', model: 'grok-4.7', vision: false, builtIn: true, key: { set: true, masked: 'x', source: 'file' }, locked: [] }],
+      bots: {},
+    } })
+    render(<App />)
+    await ready()
+    expect(await screen.findByText(/grok-4\.7/)).toBeInTheDocument() // 连接拿回来了，才算数
+    expect(screen.queryByText(/Replies here are scripted/)).toBeNull()
+  })
+
+  it('opens the thread a #thread= link names, now and when the link changes, and falls back if it is gone', async () => {
+    window.location.hash = '#thread=dm%3Achief'
+    mockGateway({ conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })] })
+    render(<App />)
+    await ready()
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Chief'))
+    await act(async () => {
+      window.location.hash = '#thread=dm%3Aresearcher'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Scout'))
+    window.location.hash = ''
+  })
+
+  it('a link to a thread that no longer exists lands on the first one', async () => {
+    window.location.hash = '#thread=dm%3Agone'
+    mockGateway({ conversations: [conversation({}), conversation({ id: 'dm:chief', title: 'Chief', members: ['chief'] })] })
+    render(<App />)
+    await ready()
+    await waitFor(() => expect(document.querySelector('.thread-header')?.textContent).toContain('Scout'))
+    window.location.hash = ''
   })
 })

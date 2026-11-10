@@ -1,6 +1,6 @@
 import type {
-  Bot, BotLlm, CheckResult, ComputerInfo, ConnectionsState, Conversation, FieldError, GatewayEvent, Message, ProviderPreset, RoutineAction,
-  RuleDuration,
+  Bot, BotLlm, BrowserStatus, CheckResult, ComputerInfo, ConnectionsState, Conversation, FieldError, GatewayEvent, Message, ProviderPreset,
+  RoutineAction, RuleDuration, SettingsView, SetupInfo, AboutInfo,
 } from './types'
 
 /** 网关说「先登录」：界面换成锁屏说明，而不是一片空白。 */
@@ -138,6 +138,24 @@ export const fetchConnectionModels = (id: string) =>
   getJson<{ ok: true; models: string[] } | { ok: false; code: string }>(`/api/connections/${encodeURIComponent(id)}/models`)
 export const setBotLlm = (botId: string, choice: { connectionId: string; model: string | null }) =>
   sendForm<BotLlm>('PUT', `/api/bots/${encodeURIComponent(botId)}/llm`, choice)
+
+/** 首次启动要不要出向导；老网关没有这个路由（或出了错）就当不用，绝不因此挡住界面 */
+export async function fetchSetup(): Promise<SetupInfo | null> {
+  const res = await request('/api/setup')
+  if (!res.ok) return null
+  return res.json() as Promise<SetupInfo>
+}
+
+/** 改设置（语言、演示模式、浏览器镜像……）；被拒时抛 FieldErrors */
+export const saveSettings = (patch: Record<string, unknown>) => sendForm<SettingsView>('PUT', '/api/settings', patch)
+export const fetchSettings = () => getJson<SettingsView>('/api/settings')
+export const fetchAbout = () => getJson<AboutInfo>('/api/about')
+
+/** 提前把同事用的浏览器下好；进度经 /ws 的 setup.browser 推过来 */
+export async function downloadBrowser(): Promise<BrowserStatus> {
+  const res = await send('POST', '/api/setup/browser', {}, { strict: true })
+  return ((await res.json()) as { browser: BrowserStatus }).browser
+}
 
 export async function createBot(name: string, role: string): Promise<Bot> {
   const res = await send('POST', '/api/bots', { name, role })

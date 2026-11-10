@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ApiError, SignedOut, answerQuestion, checkSession, connectEvents, createBot, fetchBots, fetchComputer, fetchConnections, fetchConversations,
-  fetchLanguage, fetchMessages, fetchProviders, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
+  fetchLanguage, fetchMessages, fetchProviders, fetchSetup, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
   stopThread, updateRoutine,
 } from './api'
-import { BotModelChip, BotModelPicker } from './components/BotModelPicker'
+import { BotModelChip, BotModelPicker, botModel } from './components/BotModelPicker'
+import { DemoBanner } from './components/DemoBanner'
 import { ComputerPanel } from './components/ComputerPanel'
 import { ModelsDialog } from './components/ModelsDialog'
 import { NewBotForm } from './components/NewBotForm'
+import { SettingsDialog } from './components/SettingsDialog'
+import { SetupWizard, type LanguageSetting } from './components/SetupWizard'
 import { Sidebar } from './components/Sidebar'
 import { Thread } from './components/Thread'
 import { I18nProvider, browserLanguages, pickLang, useT, type Lang } from './i18n'
 import { errorText } from './i18n/describe'
 import { applyHello, applyStatus, clearDone } from './presence'
-import type { BotStatus, ComputerInfo, ConnectionsState, Conversation, Message, ProviderPreset, RoutineAction } from './types'
+import type { BotStatus, BrowserStatus, ComputerInfo, ConnectionsState, Conversation, Message, ProviderPreset, RoutineAction, SetupInfo } from './types'
 
 /** 网关锁着：告诉人去哪拿登录链接，而不是一片空白。 */
 function SignIn() {
@@ -40,17 +43,21 @@ function withCode(text: string, name: string, code: string) {
  * 锁着的网关拿不到设置，登录页就按浏览器的语言。
  */
 export default function App() {
-  const [lang, setLang] = useState<Lang>(() => pickLang(undefined, browserLanguages()))
+  /** 设置里存的那一项（空 = 跟系统）；向导第一步改它 */
+  const [setting, setSetting] = useState<LanguageSetting>('')
+  const lang: Lang = useMemo(() => pickLang(setting, browserLanguages()), [setting])
   useEffect(() => {
     let live = true
-    void fetchLanguage().then((saved) => { if (live) setLang(pickLang(saved, browserLanguages())) })
+    void fetchLanguage().then((saved) => {
+      if (live && (saved === '' || saved === 'en' || saved === 'zh-CN')) setSetting(saved)
+    })
     return () => { live = false }
   }, [])
   useEffect(() => { document.documentElement.lang = lang }, [lang])
-  return <I18nProvider lang={lang}><Workspace /></I18nProvider>
+  return <I18nProvider lang={lang}><Workspace language={setting} onLanguage={setSetting} /></I18nProvider>
 }
 
-function Workspace() {
+function Workspace({ language, onLanguage }: { language: LanguageSetting; onLanguage: (next: LanguageSetting) => void }) {
   const t = useT()
   const [signedOut, setSignedOut] = useState<boolean | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -68,9 +75,27 @@ function Workspace() {
   /** 开着的是哪个窗口：「AI 模型」总表，或给某位同事选模型 */
   const [modelsOpen, setModelsOpen] = useState(false)
   const [pickerFor, setPickerFor] = useState<string | null>(null)
+  /** 首次启动向导：网关说要（needsSetup）才出；走完之前一直开着，哪怕中途已经存好了 key */
+  const [setup, setSetup] = useState<SetupInfo | null>(null)
+  const [wizard, setWizard] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [setupBrowser, setSetupBrowser] = useState<BrowserStatus | null>(null)
+
+  // #thread=<id>：打开就是那条对话。桌面版点系统通知、别人发来的链接都走这个
+  useEffect(() => {
+    const apply = () => {
+      const m = /^#thread=(.+)$/.exec(window.location.hash)
+      if (m) setSelectedId(decodeURIComponent(m[1]!))
+    }
+    apply()
+    window.addEventListener('hashchange', apply)
+    return () => window.removeEventListener('hashchange', apply)
+  }, [])
 
   const selected = useMemo(
-    () => conversations.find((c) => c.id === selectedId) ?? null,
+    // 选中的对话不存在（链接点名了一条删掉的对话、同事被移走）：显示第一条，别停在空白页。
+    // 在这里算而不是事后改 selectedId：链接变化和列表刷新谁先谁后、被不被合并成一次渲染，结果都一样
+    () => conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null,
     [conversations, selectedId],
   )
   const threadId = selected?.id ?? null
@@ -93,7 +118,7 @@ function Workspace() {
     setPanel(next)
   }, [])
   // 面板属于某一位同事：换了线程就收起，免得新名字盖在旧屏幕上
-  useEffect(() => { showPanel(null) }, [selectedId, showPanel])
+  useEffect(() => { showPanel(null) }, [selected?.id, showPanel])
 
   /** 拉消息期间经 WS 到达的更新先记下来，拉回来后叠在快照上，免得被旧快照覆盖掉 */
   const liveDuringFetch = useRef<Map<number, Message> | null>(null)
@@ -157,7 +182,13 @@ function Workspace() {
     checkSession()
       .then((ok) => {
         setSignedOut(!ok)
-        if (ok) void resync()
+        if (!ok) return
+        void resync()
+        // 拿不到（老网关、网关出错）就不出向导：向导是锦上添花，不能把界面挡住
+        void fetchSetup().then((s) => {
+          setSetup(s)
+          if (s?.needsSetup) setWizard(true)
+        }).catch(() => {})
       })
       .catch(() => setSignedOut(false)) // 网关没起来：先显示空界面，WS 重连上以后会补拉
   }, [resync])
@@ -183,7 +214,11 @@ function Workspace() {
         setStatuses((s) => applyStatus(s, e.botId, e.state, watchingRef.current.includes(e.botId), posted))
         return
       }
-      if (e.type !== 'message') return // 向导之类的事件不归这里管；更新的网关发来不认识的也一样
+      if (e.type === 'setup.browser') {
+        setSetupBrowser(e.browser)
+        return
+      }
+      if (e.type !== 'message') return // 更新的网关发来不认识的事件，不归这里管
       if (e.message.sender !== 'user' && e.message.kind !== 'activity') postedRef.current.add(e.message.sender)
       // 就地更新的旧消息（activity 卡片收尾、审批 chip 翻转）不该顶掉更新的那条预览
       setConversations((cs) => cs.map((c) => (
@@ -291,19 +326,69 @@ function Workspace() {
     }
   }
 
+  /** 向导走完：进 Chief 的对话；点了示例任务就替人发出去 */
+  const finishSetup = (task?: string) => {
+    setWizard(false)
+    void loadLlms().catch(guard) // 向导里可能换了模型或切到了演示模式：标题栏的模型标签要跟上
+    const chief = `dm:${setup?.chiefId ?? 'chief'}`
+    setSelectedId(chief)
+    if (task) sendMessage(chief, task).catch(guard)
+  }
+
+  /** 从设置页重开向导：先拿最新的电脑情况，拿不到就不开（老网关） */
+  const reopenWizard = async () => {
+    try {
+      const s = await fetchSetup()
+      if (!s) return
+      setSetup(s)
+      setSettingsOpen(false)
+      setWizard(true)
+    } catch (err) {
+      guard(err)
+    }
+  }
+  const signOut = useCallback(() => setSignedOut(true), [])
+
   if (signedOut) return <SignIn />
+  if (wizard && setup) {
+    return (
+      <SetupWizard
+        setup={setup}
+        providers={providers}
+        browser={setupBrowser ?? setup.computers.browser}
+        language={language}
+        onLanguage={onLanguage}
+        onBrowser={setSetupBrowser}
+        onConnections={setLlms}
+        onDone={finishSetup}
+        main={llms?.connections.find((c) => c.builtIn)}
+        {...(setup.needsSetup ? {} : { onCancel: () => { setWizard(false); void loadLlms().catch(guard) } })}
+      />
+    )
+  }
 
   const thinking = selected ? selected.members.some((id) => statuses[id] === 'thinking') : false
+  // 这个对话里谁在用演示模型：按每位同事实际用的模型算；老网关没有连接信息就看 /api/setup 的 demo
+  const inDemo = selected
+    ? selected.members.filter((id) => (llms ? botModel(llms, id) === 'stub' : Boolean(setup?.demo)))
+    : []
+  const demoBanner = selected && inDemo.length ? (
+    <DemoBanner
+      {...(inDemo.length < selected.members.length ? { names: inDemo.map((id) => roster[id]?.name ?? id) } : {})}
+      onConnect={() => void reopenWizard()}
+    />
+  ) : null
 
   return (
     <div className="app">
       <Sidebar
         conversations={conversations}
-        selectedId={selectedId}
+        selectedId={selected?.id ?? null}
         statuses={statuses}
         onSelect={setSelectedId}
         onNewBot={() => { setHireError(undefined); setHiring(true) }}
         {...(llms ? { onModels: () => setModelsOpen(true) } : {})}
+        {...(setup ? { onSettings: () => setSettingsOpen(true) } : {})}
       />
       {selected ? (
         <Thread
@@ -318,6 +403,7 @@ function Workspace() {
           onAnswer={(messageId, choices) => answerQuestion(messageId, choices).catch((err) => { guard(err); throw err })}
           onOpenScreen={openScreen}
           onStop={() => { if (threadId) stopThread(threadId).catch(guard) }}
+          banner={demoBanner}
           headerExtra={llms && selected.kind === 'dm' && selected.members[0] ? (
             <BotModelChip botId={selected.members[0]} state={llms} providers={providers} onOpen={() => setPickerFor(selected.members[0]!)} />
           ) : null}
@@ -335,6 +421,20 @@ function Workspace() {
           onForgetRule={(rule) => { void onForgetRule(rule) }}
           onWindowDone={onWindowDone}
           onShell={onShell}
+        />
+      ) : null}
+      {settingsOpen && !modelsOpen ? (
+        <SettingsDialog
+          llms={llms}
+          providers={providers}
+          browser={setupBrowser}
+          language={language}
+          onLanguage={onLanguage}
+          onBrowser={setSetupBrowser}
+          onModels={() => setModelsOpen(true)}
+          onWizard={() => void reopenWizard()}
+          onSignedOut={signOut}
+          onClose={() => setSettingsOpen(false)}
         />
       ) : null}
       {llms && modelsOpen ? (
