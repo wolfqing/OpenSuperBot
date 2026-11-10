@@ -41,6 +41,27 @@ One thing needs you today: pick the deadline for the Globex reply.
 A second question waits until the first round has closed, so answers never interleave. The stop button ends the
 round: whoever is still talking stops, and the chief does not close.
 
+### Asking someone directly
+
+Type `@` in a group thread and pick a teammate (or several). Only the teammates you named answer, and they are told
+it was addressed to them, so they reply in full rather than in two lines. The chief closes with a dispatch table
+only when you named it as well; named on its own, it simply answers.
+
+Other clients get the same through the API:
+
+```http
+POST /api/threads/group:offsite-crew/messages
+{ "text": "can you dig into the Globex numbers?", "mentions": ["researcher"] }
+```
+
+- `mentions` is a list of teammate ids. Leave it out, or send `[]`, for the whole group.
+- An `@id` written in `text` (for example `@market-watch`) counts as a mention too and is merged with the list.
+  Only exact ids are matched, never display names: names can be in any language and contain spaces, so `@Scout`
+  in prose stays plain text. An `@word` that is not a member of the group is left alone.
+- A listed id that is not a member is refused with `400` (`code: "mention_not_member"`), and nothing is posted.
+  So is a non-empty `mentions` in a direct thread (`mentions_not_group`).
+- The `202` reply echoes who was named: `{ "ok": true, "mentions": ["researcher"] }`.
+
 ## Handoffs
 
 A teammate can pass a scoped task with `message_bot`. It lands in the other teammate's thread as a

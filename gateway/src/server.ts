@@ -22,6 +22,7 @@ import { appendMemoryRule, listMemoryRules, readMemory, removeMemoryRule } from 
 import type { BotComputer, ComputerKind } from './computer.js'
 import type { BackendWhy } from './backend.js'
 import { errorBody } from './coded-error.js'
+import { resolveMentions } from './mentions.js'
 import { noticeText, type BudgetHit } from './notices.js'
 import type { SandboxMissing } from './sandbox.js'
 import { readSavedSettings, resolveSettings } from './settings.js'
@@ -453,20 +454,37 @@ export function createApp(deps: AppDeps): GatewayApp {
    * 群里一轮：成员各报各的摊子、彼此不用等，所以并行；Chief 要看完所有人的话再发分派表，所以最后。
    * 同一个群的两轮排队进行，不会互相插话。
    */
-  function startGroupRound(threadId: string, title: string, text: string): Promise<void> {
+  function startGroupRound(threadId: string, title: string, text: string, mentions: string[] = []): Promise<void> {
     return rounds.run(threadId, threadId, async (signal) => {
       const members = threadMembers(db, threadId)
         .map((id) => botById(id))
         .filter((b): b is BotRow => Boolean(b))
       const group = { title, members: members.map((b) => b.name) }
+      const opts = { origin: 'operator', persistUserMessage: false, group, trigger: 'group' } as const
+      if (mentions.length) {
+        // 点了名：只叫被点到的人；Chief 只有自己也被点到才收尾，而且得有别人先答过才发分派表
+        const named = members.filter((b) => mentions.includes(b.id))
+        const speakers = named.filter((b) => b.id !== chiefId)
+        const chief = named.find((b) => b.id === chiefId)
+        const also = (bot: BotRow) => named.filter((b) => b.id !== bot.id).map((b) => `@${b.id}`)
+        const direct = (bot: BotRow) => {
+          const others = also(bot)
+          return `Your operator asked you directly in the group: "${text}".${others.length ? ` They also asked ${others.join(', ')}; answer for your own part.` : ''} Reply in this thread.`
+        }
+        await Promise.all(speakers.map((bot) => startTurn(bot, threadId, direct(bot), opts)))
+        if (signal.aborted || !chief) return
+        await startTurn(chief, threadId, speakers.length
+          ? `Your operator asked ${speakers.map((b) => `@${b.id}`).join(', ')} and you in the group: "${text}". They have answered above. Post the dispatch table now — one "✓ item → @bot · when" line each — then one sentence on what needs your operator today.`
+          : direct(chief), opts)
+        return
+      }
       const chief = members.find((b) => b.id === chiefId)
       await Promise.all(members.filter((b) => b.id !== chiefId).map((bot) => startTurn(bot, threadId,
-        `Your operator asked the group: "${text}". Answer for your own patch only, in two lines or less.`,
-        { origin: 'operator', persistUserMessage: false, group, trigger: 'group' })))
+        `Your operator asked the group: "${text}". Answer for your own patch only, in two lines or less.`, opts)))
       if (signal.aborted || !chief) return
       await startTurn(chief, threadId,
         `Your operator asked the group: "${text}". Everyone else has reported above. Post the dispatch table now — one "✓ item → @bot · when" line each — then one sentence on what needs your operator today.`,
-        { origin: 'operator', persistUserMessage: false, group, trigger: 'group' })
+        opts)
     })
   }
 
@@ -1062,7 +1080,7 @@ export function createApp(deps: AppDeps): GatewayApp {
 
   app.post('/api/threads/:threadId/messages', async (c) => {
     const threadId = c.req.param('threadId')
-    const body = (await c.req.json().catch(() => null)) as { text?: string } | null
+    const body = (await c.req.json().catch(() => null)) as { text?: string; mentions?: unknown } | null
     const text = body?.text?.trim()
     if (!text) return c.json({ error: 'text required' }, 400)
 
@@ -1070,11 +1088,15 @@ export function createApp(deps: AppDeps): GatewayApp {
       const group = db.prepare(`SELECT title FROM threads WHERE id = ? AND kind = 'group'`)
         .get(threadId) as { title: string } | undefined
       if (!group) return c.json({ error: 'unknown thread' }, 404)
+      const mentions = resolveMentions(body?.mentions, text, threadMembers(db, threadId))
+      if (!mentions.ok) return c.json({ error: mentions.error, code: mentions.code, ...(mentions.params ? { params: mentions.params } : {}) }, 400)
       closeOpenQuestions(threadId)
       events(threadId).onMessage(insertMessage(db, { threadId, sender: 'user', kind: 'text', content: text }))
-      void startGroupRound(threadId, group.title, text)
-      return c.json({ ok: true }, 202)
+      void startGroupRound(threadId, group.title, text, mentions.ids)
+      return c.json({ ok: true, ...(mentions.ids.length ? { mentions: mentions.ids } : {}) }, 202)
     }
+    const dmMentions = resolveMentions(body?.mentions, text, [])
+    if (!dmMentions.ok) return c.json({ error: dmMentions.error, code: dmMentions.code }, 400)
 
     const bot = botById(threadId.replace(/^dm:/, ''))
     if (!bot) return c.json({ error: 'unknown thread' }, 404)

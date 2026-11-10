@@ -106,6 +106,7 @@ Every line below is implemented and covered by tests — nothing here is a roadm
 
 - **Group threads.** Ask the room a question: each teammate answers for its own patch — in parallel — then the
   chief of staff closes with a dispatch table — `✓ item → @bot · when` — and one line on what needs you today.
+  Type `@` to ask only the teammates you name.
 - **Allowlisted handoffs.** `message_bot` drops a scoped task into a teammate's thread and wakes it up. By
   default only the chief can reach everyone; peer-to-peer is off until you name the direction. Relays are
   capped at two hops so two bots cannot echo at each other.
