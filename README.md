@@ -50,9 +50,10 @@ Every line below is implemented and covered by tests — nothing here is a roadm
 **The management surface**
 
 - **Sidebar as org chart.** One thread per teammate, plus group threads. Previews are completion states, so a
-  glance down the list is a walk past everyone's desk. Each avatar says whether that teammate is working,
-  waiting on you, stuck, or done while you were elsewhere. An amber badge counts the approvals and questions
-  waiting on you, and the tab title carries the total.
+  glance down the list is a walk past everyone's desk. Every teammate has a face of its own — a small coloured
+  shape with a pair of eyes — and it acts out what that teammate is doing: bobbing while it works, hopping when
+  it waits on you, shaking its head when it is stuck, smiling when it finished while you were elsewhere. An
+  amber badge counts the approvals and questions waiting on you, and the tab title carries the total.
 - **One report grammar.** Work comes back as `✓ system → result · count` lines with a single closing sentence
   that surfaces only what needs you. Same shape from every teammate.
 - **Draft-and-hold approvals.** Anything leaving the workspace stops at the door: the chip shows exactly what
@@ -168,7 +169,7 @@ pnpm start` and the launchd / systemd / Windows Task Scheduler templates in [doc
 | Variable | Default | What it does |
 |---|---|---|
 | `OPENSUPERBOT_API_BASE` | `https://api.x.ai/v1` | Any OpenAI-compatible endpoint |
-| `OPENSUPERBOT_API_KEY` | — | Your key. Never written to disk by this repo |
+| `OPENSUPERBOT_API_KEY` | — | Your key. A key set here is never written to disk; one entered in the wizard is saved in the data folder, readable only by you |
 | `OPENSUPERBOT_MODEL` | `grok-4.7` | `stub` runs offline with no key |
 | `OPENSUPERBOT_DATA` | `gateway/data` | SQLite, bot data, workspaces, the gateway token |
 | `OPENSUPERBOT_COMPUTERS` | `auto` | `docker`, `local`, or `auto` (Docker if it is running and the image is built, else local) |
