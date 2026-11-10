@@ -22,6 +22,9 @@ names.
   from, and an About section with the version, the data folder, where the logs go and what it runs on. Settings
   pinned by environment variables are shown read-only with the variable to change. The setup can be run again
   from here, keeping the saved key when you pick the same service, and closed half way.
+- **Demo mode says so where you work.** A thread whose teammate runs the scripted demo model shows a banner under
+  its header (in a group, naming who) with a button to connect a real model, and the model chip reads "Demo mode"
+  instead of the service and `stub`.
 
 ### Fixed
 

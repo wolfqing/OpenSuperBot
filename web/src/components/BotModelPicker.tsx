@@ -4,6 +4,13 @@ import { useT } from '../i18n'
 import type { BotLlm, ConnectionsState, ProviderPreset } from '../types'
 import { connectionLabel, fieldText } from './ModelsDialog'
 
+/** 这位同事此刻实际用的模型：自己选的，否则它那个连接的默认模型（连接不在了就退回默认连接）。'stub' = 演示模式 */
+export function botModel(state: ConnectionsState, botId: string): string | null {
+  const choice = state.bots[botId] ?? { connectionId: 'main', model: null }
+  const c = state.connections.find((x) => x.id === choice.connectionId) ?? state.connections[0]
+  return c ? choice.model ?? c.model : null
+}
+
 /** 对话顶部那一小块：这位同事此刻用哪个 AI。点开就能换 */
 export function BotModelChip({ botId, state, providers, onOpen }: {
   botId: string
@@ -15,7 +22,8 @@ export function BotModelChip({ botId, state, providers, onOpen }: {
   const choice = state.bots[botId] ?? { connectionId: 'main', model: null }
   const c = state.connections.find((x) => x.id === choice.connectionId) ?? state.connections[0]
   if (!c) return null
-  const text = t('picker.chip', { connection: connectionLabel(c, providers, t), model: choice.model ?? c.model })
+  const model = choice.model ?? c.model
+  const text = model === 'stub' ? t('picker.chipDemo') : t('picker.chip', { connection: connectionLabel(c, providers, t), model })
   return (
     <button className="model-chip" onClick={onOpen} title={text}>
       <span className="model-chip-dot" aria-hidden="true" />

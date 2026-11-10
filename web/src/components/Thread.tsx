@@ -37,7 +37,7 @@ function dayLabel(ts: number, now: Date, t: T): string {
 const timeLabel = (ts: number, locale: string | undefined) =>
   new Date(ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 
-export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra }: {
+export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra, banner }: {
   conversation: Conversation
   messages: Message[]
   thinking: boolean
@@ -50,6 +50,8 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   onStop?: () => void
   /** 标题栏右侧多放的东西（比如这位同事用哪个 AI） */
   headerExtra?: ReactNode
+  /** 标题栏下面一条横幅（比如演示模式） */
+  banner?: ReactNode
 }) {
   const t = useT()
   const [draft, setDraft] = useState('')
@@ -159,6 +161,7 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
           </button>
         ) : null}
       </header>
+      {banner}
       <div
         className="thread-scroll"
         ref={scrollRef}

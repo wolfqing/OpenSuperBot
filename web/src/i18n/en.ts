@@ -415,6 +415,13 @@ export const en = {
   'settings.about.logs': 'Logs',
   'settings.about.logsStdout': 'Printed in the terminal that runs the gateway',
   'settings.about.runtime': 'Running on',
+
+  // 演示模式
+  'picker.chipDemo': 'Demo mode',
+  'demo.tag': 'Demo',
+  'demo.banner': 'Replies here are scripted: they cost nothing and nothing goes to an AI service.',
+  'demo.bannerSome': '{names}: in demo mode, so their replies are scripted, cost nothing and go to no AI service.',
+  'demo.connect': 'Connect a real model',
 } as const
 
 export type MessageKey = keyof typeof en

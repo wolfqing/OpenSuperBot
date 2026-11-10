@@ -28,6 +28,8 @@ function mockGateway(opts: {
   language?: string
   /** /api/setup 的回答；不给 = 老网关，没有向导 */
   setup?: unknown
+  /** /api/connections 的回答；不给 = 老网关 */
+  connections?: unknown
 } = {}) {
   const calls: string[] = []
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -39,6 +41,8 @@ function mockGateway(opts: {
     if (url === '/api/conversations') return json(opts.conversations ?? [conversation({})])
     if (url === '/api/bots') return json([])
     if (url === '/api/setup' && opts.setup) return json(opts.setup)
+    if (url === '/api/connections' && opts.connections) return json(opts.connections)
+    if (url === '/api/settings/providers' && opts.connections) return json([])
     if (url === '/api/about' && opts.setup) return json({ version: null, dataDir: '/d', logs: 'stdout', runtime: { node: '24', platform: 'darwin', arch: 'arm64' }, computers: 'local' })
     if (url === '/api/settings' && opts.setup && opts.language === undefined) {
       return json({ values: { model: 'grok-4.7', language: '', computers: 'auto', browserMirror: '' }, sources: {}, apiKey: { set: true, masked: 'x', source: 'file' }, needsRestart: [] })
@@ -307,5 +311,35 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
     await act(async () => { screen.getByRole('button', { name: 'Close the setup' }).click() })
     await waitFor(() => expect(document.querySelector('.sidebar')).not.toBeNull())
+  })
+
+  it('marks a thread whose teammate runs the demo model, and connects a real model from there', async () => {
+    const connection = (model: string) => ({
+      connections: [{ id: 'main', name: '', provider: '', api: 'chat', baseURL: 'https://api.x.ai/v1', model, vision: false, builtIn: true, key: { set: false, masked: '', source: 'none' }, locked: [] }],
+      bots: {},
+    })
+    const computers = {
+      kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+      browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+      browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+    }
+    mockGateway({ setup: { needsSetup: false, chiefId: 'chief', demo: true, computers }, connections: connection('stub') })
+    render(<App />)
+    await ready()
+    expect(await screen.findByText(/Replies here are scripted/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Demo mode' })).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Connect a real model' }).click() })
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+  })
+
+  it('shows no demo banner on a real model', async () => {
+    mockGateway({ connections: {
+      connections: [{ id: 'main', name: '', provider: 'xai', api: 'responses', baseURL: 'https://api.x.ai/v1', model: 'grok-4.7', vision: false, builtIn: true, key: { set: true, masked: 'x', source: 'file' }, locked: [] }],
+      bots: {},
+    } })
+    render(<App />)
+    await ready()
+    expect(await screen.findByText(/grok-4\.7/)).toBeInTheDocument() // 连接拿回来了，才算数
+    expect(screen.queryByText(/Replies here are scripted/)).toBeNull()
   })
 })

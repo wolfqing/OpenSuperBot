@@ -412,4 +412,11 @@ export const zhCN: Record<MessageKey, string> = {
   'settings.about.logs': '日志',
   'settings.about.logsStdout': '打在运行网关的终端里',
   'settings.about.runtime': '运行环境',
+
+  // 演示模式
+  'picker.chipDemo': '演示模式',
+  'demo.tag': '演示',
+  'demo.banner': '这里的回复是脚本写好的：不花钱，也不连任何 AI 服务。',
+  'demo.bannerSome': '{names} 在演示模式：回复是脚本写好的，不花钱，也不连任何 AI 服务。',
+  'demo.connect': '接真模型',
 }

@@ -4,7 +4,8 @@ import {
   fetchLanguage, fetchMessages, fetchProviders, fetchSetup, forgetMemoryRule, resolveApproval, revokeRule, sendMessage, setComputerShell, setComputerWindow,
   stopThread, updateRoutine,
 } from './api'
-import { BotModelChip, BotModelPicker } from './components/BotModelPicker'
+import { BotModelChip, BotModelPicker, botModel } from './components/BotModelPicker'
+import { DemoBanner } from './components/DemoBanner'
 import { ComputerPanel } from './components/ComputerPanel'
 import { ModelsDialog } from './components/ModelsDialog'
 import { NewBotForm } from './components/NewBotForm'
@@ -354,6 +355,16 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
   }
 
   const thinking = selected ? selected.members.some((id) => statuses[id] === 'thinking') : false
+  // 这个对话里谁在用演示模型：按每位同事实际用的模型算；老网关没有连接信息就看 /api/setup 的 demo
+  const inDemo = selected
+    ? selected.members.filter((id) => (llms ? botModel(llms, id) === 'stub' : Boolean(setup?.demo)))
+    : []
+  const demoBanner = selected && inDemo.length ? (
+    <DemoBanner
+      {...(inDemo.length < selected.members.length ? { names: inDemo.map((id) => roster[id]?.name ?? id) } : {})}
+      onConnect={() => void reopenWizard()}
+    />
+  ) : null
 
   return (
     <div className="app">
@@ -379,6 +390,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
           onAnswer={(messageId, choices) => answerQuestion(messageId, choices).catch((err) => { guard(err); throw err })}
           onOpenScreen={openScreen}
           onStop={() => { if (threadId) stopThread(threadId).catch(guard) }}
+          banner={demoBanner}
           headerExtra={llms && selected.kind === 'dm' && selected.members[0] ? (
             <BotModelChip botId={selected.members[0]} state={llms} providers={providers} onOpen={() => setPickerFor(selected.members[0]!)} />
           ) : null}
