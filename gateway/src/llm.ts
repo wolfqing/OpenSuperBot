@@ -10,6 +10,11 @@ export type ChatMsg = {
   /** 附在 user 消息上的图片（data URL）；发给模型时转成各家的图片片段 */
   images?: string[]
   /**
+   * 这些图是操作者这一回合发来的：收旧截图时不算它们。不然「照这张图去网站上找」的那张图，
+   * 会被同事紧接着拍的第一张截图顶掉。只在图到达的那一回合带着，所以不会越积越多。
+   */
+  keepImages?: boolean
+  /**
    * 原生接口回的原样内容（Claude 的 content 块、Responses 的 output 项）。同一回合里原样发回去：
    * 思考块、推理项和它们的签名要一字不改才认；换了一家接口就按 content / tool_calls 重新拼。
    */
@@ -141,16 +146,16 @@ export const EARLIER_SCREENSHOT = '[an earlier screenshot, no longer shown]'
  */
 export function latestImageOnly(messages: ChatMsg[]): ChatMsg[] {
   let last = -1
-  messages.forEach((m, i) => { if (m.images?.length) last = i })
+  messages.forEach((m, i) => { if (m.images?.length && !m.keepImages) last = i })
   return messages.map((m, i) => {
-    if (i === last || !m.images?.length) return m
+    if (i === last || !m.images?.length || m.keepImages) return m
     const { images: _images, ...rest } = m
     return { ...rest, content: EARLIER_SCREENSHOT }
   })
 }
 
 function toWire(m: ChatMsg): Record<string, unknown> {
-  const { images, native: _native, ...rest } = m
+  const { images, native: _native, keepImages: _keepImages, ...rest } = m
   if (!images?.length) return rest
   return {
     ...rest,
@@ -252,6 +257,35 @@ function lastUserText(messages: ChatMsg[]): string {
   return text.replace(/\n\n\(Current time: [^)]*\)\s*$/, '')
 }
 
+/** 操作者这次发来的文件：从最后往前，连着的 user 消息里那几行附件说明（碰到自己的回复就停，更早的不算这次的） */
+function attachedNow(messages: ChatMsg[]): { name: string; seen: boolean; blind: boolean; placed: boolean }[] {
+  const found: { name: string; seen: boolean; blind: boolean; placed: boolean }[] = []
+  for (let i = messages.length - 1; i >= 0 && messages[i]!.role === 'user'; i--) {
+    const line = messages[i]!.content ?? ''
+    const name = /^\[(?:image|file) from your operator\] (.+?) \(/.exec(line)?.[1]
+    if (!name) continue
+    found.unshift({
+      name,
+      seen: line.includes('shown with this message'),
+      blind: line.includes('You cannot see images'),
+      placed: line.includes('It is in your folder as'),
+    })
+  }
+  return found
+}
+
+function acknowledgeFiles(files: ReturnType<typeof attachedNow>): string {
+  const names = files.map((f) => f.name)
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]
+  const picture = files.some((f) => f.seen) ? ' I can see the picture.'
+    : files.some((f) => f.blind) ? ' I cannot see pictures with this model.' : ''
+  const subject = files.length === 1 ? 'It' : files.length === 2 ? 'Both' : 'They'
+  const here = files.filter((f) => f.placed).length
+  const where = here === files.length ? ` ${subject} ${files.length === 1 ? 'is' : 'are'} in my uploads folder.`
+    : here === 0 ? ` ${files.length === 1 ? 'It' : 'They'} did not reach my computer.` : ' Not all of them reached my computer.'
+  return `Got ${list}.${picture}${where}`
+}
+
 /** 名字或 id 都能指到同一个同事，让 stub 听得懂「ask ticker to …」。 */
 const TEAMMATE_IDS: Record<string, string> = {
   chief: 'chief',
@@ -311,6 +345,9 @@ function createStubLLM(): LLM {
         if (result.startsWith('That rule was already')) return stubText('Already had that one on file.')
         return stubText('All filed. Ping me when you want the next pass.')
       }
+
+      const files = attachedNow(messages)
+      if (files.length) return stubText(acknowledgeFiles(files))
 
       const text = lastUserText(messages)
       const lower = text.toLowerCase()

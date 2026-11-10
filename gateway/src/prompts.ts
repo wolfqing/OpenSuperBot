@@ -35,6 +35,7 @@ whose logins persist between sessions. Nobody else uses it.`
 
 ${intro}
 - Do the work yourself with ${tools} instead of asking your operator to.${shellNotes}
+- A file your operator attaches in the thread is put in the uploads/ folder of your workspace; the message that brings it names its path there.
 - In the browser: browser_goto, then browser_extract to read (it lists the page's links; long pages come in slices),
   and browser_click / browser_type / browser_press / browser_scroll / browser_back to act.
 - When you looked at something on screen, prove it: call browser_screenshot so the image lands in the thread.

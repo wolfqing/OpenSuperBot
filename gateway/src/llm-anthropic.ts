@@ -120,7 +120,8 @@ function assistantBlocks(m: ChatMsg): BetaContentBlockParam[] {
 /** OpenAI 格式的对话 → system + Claude 的 messages。相邻同角色的并成一条，工具结果排在最前面。hidden = 收掉了几张旧截图 */
 export function toAnthropic(messages: ChatMsg[]): { system: string; messages: BetaMessageParam[]; hidden: number } {
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content ?? '').join('\n\n')
-  let toHide = screenshotsToHide(messages.filter((m) => m.images?.length).length)
+  // 操作者这一回合发来的图不算截图：不计数、不收
+  let toHide = screenshotsToHide(messages.filter((m) => m.images?.length && !m.keepImages).length)
   const hidden = toHide
   const out: BetaMessageParam[] = []
   const push = (role: 'user' | 'assistant', blocks: BetaContentBlockParam[]) => {
@@ -145,7 +146,7 @@ export function toAnthropic(messages: ChatMsg[]): { system: string; messages: Be
       push('user', [{ type: 'tool_result', tool_use_id: toolId(m.tool_call_id ?? ''), content: m.content || '(no output)' }])
     } else {
       const blocks: BetaContentBlockParam[] = []
-      if (m.images?.length && toHide > 0) {
+      if (m.images?.length && !m.keepImages && toHide > 0) {
         toHide--
         push('user', [{ type: 'text', text: EARLIER_SCREENSHOT }])
         continue

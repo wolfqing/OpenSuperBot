@@ -2,10 +2,16 @@ import { chromium } from 'playwright-core'
 import { createBrowserSession, pageOperations, type BrowserLike } from './browser-page.js'
 import type { BotComputer, ShellResult } from './computer.js'
 import type { Endpoints } from './containers.js'
+import { tarFile } from './tar.js'
 import { createWorkflowRecorder } from './workflow-recorder.js'
 
 export type DockerComputerDeps = {
   fetchImpl?: typeof fetch
+  /**
+   * 把一个 tar 解进容器里的某个目录（Docker 的 putArchive）。放文件走它而不是直接写宿主上挂进去的那个文件夹：
+   * 同事在容器里是 root，能把 uploads 换成指向宿主任意位置的符号链接；经 Docker 写，路径是在容器自己的文件系统里解析的。
+   */
+  putArchive?: (tar: Buffer, path: string) => Promise<unknown>
   connect?: (cdpUrl: string, headers?: Record<string, string>) => Promise<BrowserLike>
 }
 
@@ -84,6 +90,11 @@ export function createDockerComputer(endpoints: Endpoints, deps: DockerComputerD
     async writeFile(path, content) {
       await post('/write', { path, content })
     },
+    ...(deps.putArchive ? {
+      async putFile(path: string, bytes: Buffer) {
+        await deps.putArchive!(tarFile(path, bytes), '/workspace')
+      },
+    } : {}),
     async startWorkflowRecording(title, intent) {
       return createWorkflowRecorder(await session.page(), title, intent)
     },

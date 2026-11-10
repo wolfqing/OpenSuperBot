@@ -32,6 +32,23 @@ describe('Thread', () => {
     expect(screen.getByText('Done.')).toBeInTheDocument()
   })
 
+  it('shows a file the operator sent as a link under its name, and says so once it was removed', () => {
+    const withFiles: Message[] = [...messages, {
+      id: 4, thread_id: 'dm:researcher', sender: 'user', kind: 'attachment', content: '', created_at: 4,
+      payload: { id: 'a'.repeat(32), url: `/api/uploads/${'a'.repeat(32)}`, name: 'notes.md', mime: 'text/markdown', size: 6 },
+    }, {
+      id: 5, thread_id: 'dm:researcher', sender: 'user', kind: 'attachment', content: '', created_at: 5,
+      payload: { id: 'b'.repeat(32), url: `/api/uploads/${'b'.repeat(32)}`, name: 'old.png', mime: 'image/png', size: 9, deleted: true },
+    }]
+    render(<Thread conversation={dm} roster={roster} messages={withFiles} thinking={false} onSend={() => {}} onDecide={() => {}} />)
+    const link = screen.getByRole('link', { name: /notes\.md/ })
+    expect(link).toHaveAttribute('href', `/api/uploads/${'a'.repeat(32)}`)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noreferrer')
+    expect(screen.getByText(/old\.png/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /old\.png/ })).toBeNull()
+  })
+
   it('renders a screenshot chip', () => {
     const withShot: Message[] = [...messages, {
       id: 4, thread_id: 'dm:researcher', sender: 'researcher', kind: 'screenshot', content: '', created_at: 4,

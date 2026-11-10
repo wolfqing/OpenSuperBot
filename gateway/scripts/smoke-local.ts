@@ -41,6 +41,18 @@ if (process.platform === 'win32') {
   check('Windows paths cannot leave the workspace either', refused.every(Boolean), outs.filter((_, i) => !refused[i]).join(', ') || 'drives, shares, devices, streams')
 }
 
+// 操作者发来的文件：经电脑这层放进 uploads/，文本读得回来，二进制一个字节不差
+const picture = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 255])
+await computer.putFile!('uploads/1a2b3c4d-会议 notes.md'.replace(' ', '_'), Buffer.from('# from the operator\n'))
+await computer.putFile!('uploads/5e6f7a8b-shot.png', picture)
+const landed = await stat(join(dataDir, 'workspaces', BOT, 'uploads', '5e6f7a8b-shot.png'))
+check('a file from the operator lands in uploads/', landed.size === picture.length
+  && (await computer.readFile('uploads/1a2b3c4d-会议_notes.md')).includes('from the operator'))
+check('putting the same file again is fine; a different one under that name is refused',
+  (await computer.putFile!('uploads/5e6f7a8b-shot.png', picture).then(() => true, () => false))
+  && await rejects(computer.putFile!('uploads/5e6f7a8b-shot.png', Buffer.from('other')), /already/))
+check('a file cannot be put outside the workspace', await rejects(computer.putFile!('../x.txt', picture), /escapes/))
+
 const started = Date.now()
 const nav = await computer.goto('https://example.com')
 check('browser_goto (first launch)', /example/i.test(nav.title), `${nav.title} in ${Date.now() - started} ms`)
@@ -78,6 +90,8 @@ if (sandbox) {
   const self = await sandboxSelfCheck(sandbox, { workspace, tmp: join(dataDir, 'bots', BOT, 'tmp'), dataDir })
   check('sandbox self-check', self.ok, self.ok ? sandbox.kind : self.why)
   shellOn = true
+  const got = await computer.shell('wc -c < uploads/5e6f7a8b-shot.png; cat uploads/1a2b3c4d-*notes.md')
+  check('a sandboxed command can read the files the operator sent', got.stdout.includes('8') && got.stdout.includes('from the operator'), got.stdout.trim().replace(/\n/g, ' '))
   const hi = await computer.shell('echo hi && pwd && echo "$HOME"')
   check('shell runs in the workspace', hi.exitCode === 0 && hi.stdout.includes('hi') && hi.stdout.includes(`workspaces/${BOT}`), hi.stdout.trim().replace(/\n/g, ' '))
   const leak = await computer.shell(`echo x > "${join(dataDir, 'leak.txt')}"; echo exit=$?`)

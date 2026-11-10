@@ -71,6 +71,19 @@ describe('OpenAI Responses API', () => {
     ])
   })
 
+  it('keeps an image the operator sent this turn next to the latest screenshot', () => {
+    const { input } = toResponses([
+      { role: 'user', content: 'mine', images: ['data:image/png;base64,MINE'], keepImages: true },
+      { role: 'user', content: 'one', images: ['data:image/png;base64,ONE'] },
+      { role: 'user', content: 'two', images: ['data:image/png;base64,TWO'] },
+    ])
+    expect(input).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'mine' }, { type: 'input_image', image_url: 'data:image/png;base64,MINE' }] },
+      { role: 'user', content: EARLIER_SCREENSHOT },
+      { role: 'user', content: [{ type: 'input_text', text: 'two' }, { type: 'input_image', image_url: 'data:image/png;base64,TWO' }] },
+    ])
+  })
+
   it('replays turns from another provider as plain items, and asks for text only when told to', async () => {
     const { sent, fetchImpl } = fakeResponses([{ output: [] }])
     await createLLM(target, fetchImpl).chat([

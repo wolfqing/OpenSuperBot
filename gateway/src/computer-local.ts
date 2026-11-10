@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { mkdir, open, readFile, realpath, stat } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises'
 import nodePath, { dirname, join, relative, sep } from 'node:path'
 import { chromium } from 'playwright-core'
 import { createBrowserSession, pageOperations, type BrowserLike, type ContextLike } from './browser-page.js'
@@ -210,6 +210,25 @@ export function createLocalComputer(opts: LocalComputerOptions): BotComputer {
       const handle = await open(full, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW)
       try {
         await handle.writeFile(content, 'utf8')
+      } finally {
+        await handle.close()
+      }
+    },
+    async putFile(path, bytes) {
+      if (bytes.length > MAX_FILE_BYTES) throw new Error('content too large')
+      const full = await confined(opts.workspaceDir, path)
+      await mkdir(dirname(full), { recursive: true })
+      // 只新建、不覆盖、最后一段不跟符号链接：同事先在这个名字上放了别的东西（或一个链接），就不动它
+      const handle = await open(full, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o644)
+        .catch(async (err: NodeJS.ErrnoException) => {
+          if (err.code !== 'EEXIST') throw err
+          const there = await lstat(full)
+          if (there.isFile() && there.size === bytes.length && (await readFile(full)).equals(bytes)) return null
+          throw new Error('a different file is already there')
+        })
+      if (!handle) return // 上次已经放过同一份
+      try {
+        await handle.writeFile(bytes)
       } finally {
         await handle.close()
       }

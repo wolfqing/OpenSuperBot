@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { listActions, recordAction, type ActionTrigger } from './actions.js'
-import { runTurn, type TurnOrigin, type TurnOutcome } from './agent.js'
+import { runTurn, type AttachmentBrief, type TurnOrigin, type TurnOutcome } from './agent.js'
 import {
   attachApprovalMessage, canRemember, createApproval, createRule, findMatchingRule, getApproval, getRule, isRuleDuration,
   blockText, isThumbsUp, itemsOf, latestPendingApproval, listActiveRules, pickItems, rememberBlock, rememberReason, resolveApproval, revokeRule,
@@ -35,10 +35,16 @@ import { screenPagePath, screencastPath } from './screen.js'
 import { saveScreenshot, screenshotFilePath } from './screenshots.js'
 import { listSkills, readSkill, skillsDir } from './skills.js'
 import type { Scheduler } from './scheduler.js'
+import { readBodyUpTo } from './body.js'
 import { mountConnections } from './connections-api.js'
 import { mountSettings, type SettingsDeps } from './settings-api.js'
 import { mountSetup, type SetupDeps } from './setup-api.js'
 import { createTurnQueue } from './turns.js'
+import { CLAIM_ERRORS, mountUploads } from './uploads-api.js'
+import {
+  MAX_IMAGES_PER_TURN, MODEL_IMAGE_MAX_BYTES, MODEL_IMAGE_MAX_SIDE, computerPath, createUploads, describeUpload, isImage,
+  type ImageNote, type UploadRow,
+} from './uploads.js'
 import type { WorkflowRecording } from './workflow-recorder.js'
 import { listWorkflowTraces, parseWorkflowTrace, readWorkflowTrace, saveWorkflowTrace, type WorkflowTrace } from './workflows.js'
 
@@ -81,6 +87,8 @@ export type AppDeps = {
   settings?: SettingsDeps
   /** 首次启动向导要的（浏览器、Docker 情况）；和 settings 一起传才挂 /api/setup */
   setup?: SetupDeps
+  /** 操作者发来的文件总共最多占多少 MB；0 或不传 = 不限 */
+  uploadsMaxMb?: number
 }
 
 export type GatewayApp = {
@@ -90,6 +98,8 @@ export type GatewayApp = {
   hello(): GatewayEvent
   runRoutine(routine: RoutineRow, opts?: { force?: boolean; payload?: string }): Promise<'ran' | 'skipped' | 'gone'>
   isBusy(botId: string): boolean
+  /** 收拾上传目录：没挂到消息上的过期上传、对不上账的文件。启动时和之后每小时跑一次 */
+  sweepUploads(): Promise<{ orphans: number; strays: number; missing: number }>
 }
 
 type QuestionPayload = { question: string; options: string[]; multi: boolean; status: string; answer?: string[] }
@@ -115,29 +125,6 @@ const MAX_HOOK_BYTES = 1_000_000
 
 /** 回合这样收场，这位同事就算「卡住了」，直到下一回合 */
 const BLOCKING: ReadonlySet<TurnOutcome> = new Set(['error', 'budget', 'limit'])
-
-/** 最多读 limit 字节；多一个字节就停下并返回 null，不把超大的请求体整个搬进内存 */
-async function readBodyUpTo(body: ReadableStream<Uint8Array> | null, limit: number): Promise<Buffer | null> {
-  if (!body) return Buffer.alloc(0)
-  const chunks: Uint8Array[] = []
-  let size = 0
-  const reader = body.getReader()
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      size += value.byteLength
-      if (size > limit) {
-        await reader.cancel().catch(() => {})
-        return null
-      }
-      chunks.push(value)
-    }
-  } catch {
-    return Buffer.alloc(0)
-  }
-  return Buffer.concat(chunks)
-}
 
 function describeWebhookBody(raw: string, contentType: string | undefined): string {
   let body = raw.trim()
@@ -215,6 +202,111 @@ export function createApp(deps: AppDeps): GatewayApp {
   const routineBotsInFlight = new Map<string, number>()
   /** 已落库、还没交给某个回合去回答的用户消息（按线程） */
   const waiting = new Map<string, Set<number>>()
+  /** 操作者发来的文件。原件在 <data>/uploads；没有数据目录就没有这项功能 */
+  const uploads = dataDir
+    ? createUploads({ db, dataDir, maxTotalBytes: (deps.uploadsMaxMb ?? 0) * 1024 * 1024, now: () => now().getTime() })
+    : null
+  /** 文件没了（操作者移除，或对账时发现盘上已经没有）：线程里那条消息留着，标成已移除 */
+  const markUploadRemoved = (upload: UploadRow) => {
+    const message = upload.message_id === null ? null : getMessage(db, upload.message_id)
+    if (!message) return
+    const payload = { ...(message.payload as Record<string, unknown> | null), deleted: true }
+    updateMessagePayload(db, message.id, payload)
+    hub.broadcast({ type: 'message', threadId: message.thread_id, message: { ...message, payload } })
+  }
+
+  /**
+   * 这位同事这一回合怎么看历史里的附件。两件事都按同事各记各的：
+   * - 文件放到它电脑上了没有：没放就现在放（经电脑那层，不直接写 workspace 目录），放不上不拦回合，如实说「不在你电脑上」；
+   * - 图给它的模型看过没有：没看过、模型又能看图，这一回合就带上，模型真收到之后才记。
+   * 所以群里当时没被点名的同事，日后被问到时照样拿得到文件、看得到图。
+   */
+  async function briefAttachments(bot: BotRow, vision: boolean, rows: MessageRow[]): Promise<AttachmentBrief> {
+    const store = uploads!
+    const found = rows.map((row) => ({ row, upload: store.get((row.payload as { id?: unknown } | null)?.id) }))
+    const live = found.flatMap((f) => (f.upload && f.upload.deleted_at === null ? [f.upload] : []))
+    const seen = store.seen(bot.id, live.map((u) => u.id))
+
+    const placed = new Set(live.filter((u) => seen.get(u.id)?.placed).map((u) => u.id))
+    let computer: BotComputer | null | undefined
+    for (const upload of live) {
+      if (placed.has(upload.id) || !pool || computer === null) continue
+      try {
+        computer ??= await pool.get(bot.id)
+        if (!computer.putFile) { computer = null; continue }
+        const bytes = await store.bytes(upload.id)
+        if (!bytes) continue
+        await computer.putFile(computerPath(upload), bytes)
+        store.markPlaced(upload.id, bot.id)
+        placed.add(upload.id)
+      } catch {
+        if (!computer) computer = null // 电脑起不来：这一回合不再试；单个文件放不上就接着放下一个
+      }
+    }
+
+    const unseen = live.filter((u) => isImage(u.mime) && !seen.get(u.id)?.shown)
+    const fits = (u: UploadRow) =>
+      u.size <= MODEL_IMAGE_MAX_BYTES && (u.width ?? 0) <= MODEL_IMAGE_MAX_SIDE && (u.height ?? 0) <= MODEL_IMAGE_MAX_SIDE
+    // 一回合给的图有个数：取最新的那几张，其余只给名字（下一回合轮到它们）
+    const turn = new Set(vision ? unseen.filter(fits).slice(-MAX_IMAGES_PER_TURN).map((u) => u.id) : [])
+    const lines = new Map<number, string>()
+    const images = new Map<number, string>()
+    const showing: string[] = []
+    for (const { row, upload } of found) {
+      if (!upload) continue // 记录都没了：让回合用文件名兜底
+      if (upload.deleted_at !== null) {
+        lines.set(row.id, describeUpload(upload, { removed: true }))
+        continue
+      }
+      let note: ImageNote | undefined
+      if (isImage(upload.mime)) {
+        if (seen.get(upload.id)?.shown) note = 'earlier'
+        else if (!vision) note = 'no-vision'
+        else if (!fits(upload)) note = 'too-large'
+        else if (!turn.has(upload.id)) note = 'too-many'
+        else {
+          const bytes = await store.bytes(upload.id)
+          if (bytes) {
+            images.set(row.id, `data:${upload.mime};base64,${bytes.toString('base64')}`)
+            showing.push(upload.id)
+            note = 'now'
+          }
+        }
+      }
+      lines.set(row.id, describeUpload(upload, {
+        ...(placed.has(upload.id) ? { path: computerPath(upload) } : {}),
+        ...(note ? { image: note } : {}),
+      }))
+    }
+    return {
+      line: (messageId) => lines.get(messageId),
+      image: (messageId) => images.get(messageId),
+      shown: () => { if (showing.length) store.markShown(showing, bot.id) },
+    }
+  }
+
+  /** 操作者发的一条消息落库：有字先一条文本，再每个文件一条附件消息，同一个事务里把上传挂上去；然后按顺序广播 */
+  function postFromOperator(threadId: string, text: string, files: UploadRow[]): MessageRow[] {
+    const rows = db.transaction(() => {
+      const out: MessageRow[] = []
+      if (text) out.push(insertMessage(db, { threadId, sender: 'user', kind: 'text', content: text }))
+      for (const file of files) {
+        const message = insertMessage(db, { threadId, sender: 'user', kind: 'attachment', payload: uploads!.view(file) })
+        uploads!.attach(file.id, threadId, message.id)
+        out.push(message)
+      }
+      return out
+    })()
+    for (const row of rows) events(threadId).onMessage(row)
+    return rows
+  }
+
+  /** 群里的 seed 要把话引给每位成员：带了文件就说一声，只有文件没有话也别引一对空引号 */
+  function askedWith(text: string, files: UploadRow[]): string {
+    if (!files.length) return text
+    const names = `${files.length} file${files.length === 1 ? '' : 's'} attached: ${files.map((f) => f.name).join(', ')}`
+    return text ? `${text} [${names}]` : `(no message, ${names})`
+  }
   const workflowRecordings = new Map<string, ActiveWorkflowRecording>()
   const workflowDrafts = new Map<string, WorkflowDraft>()
   const releaseWorkflowRecording = (botId: string, active: ActiveWorkflowRecording) => {
@@ -357,11 +449,13 @@ export function createApp(deps: AppDeps): GatewayApp {
       const trigger = opts.trigger ?? 'you'
       // 这位同事此刻用的模型：回合开始时定下，回合中途改了设置从下一回合起生效
       const own = deps.llmFor?.(bot.id)
+      const vision = own ? own.vision : (typeof deps.vision === 'function' ? deps.vision() : deps.vision) === true
       const outcome = await runTurn({
         db, llm: own?.llm ?? llm, bot, soul, manual, memory, routines, threadId, signal, now,
         origin: opts.origin,
         hop: opts.hop ?? 0,
-        vision: own ? own.vision : (typeof deps.vision === 'function' ? deps.vision() : deps.vision) === true,
+        vision,
+        ...(uploads ? { attachments: (rows: MessageRow[]) => briefAttachments(bot, vision, rows) } : {}),
         ...(deps.timeZone ? { timeZone: deps.timeZone } : {}),
         ...(deps.maxSteps ? { maxSteps: deps.maxSteps } : {}),
         ...(deps.turnMinutes !== undefined ? { turnTimeoutMs: deps.turnMinutes * 60_000 } : {}),
@@ -1047,7 +1141,9 @@ export function createApp(deps: AppDeps): GatewayApp {
     for (const path of paths) {
       try {
         const body = await readFile(path)
-        return c.body(body, 200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=31536000, immutable' })
+        return c.body(body, 200, {
+          'Content-Type': 'image/png', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=31536000, immutable',
+        })
       } catch {
         // 试下一个位置
       }
@@ -1078,11 +1174,19 @@ export function createApp(deps: AppDeps): GatewayApp {
     return c.json({ ok: true }, 202)
   })
 
+  mountUploads(app, { uploads, onRemoved: markUploadRemoved })
+
   app.post('/api/threads/:threadId/messages', async (c) => {
     const threadId = c.req.param('threadId')
-    const body = (await c.req.json().catch(() => null)) as { text?: string; mentions?: unknown } | null
-    const text = body?.text?.trim()
-    if (!text) return c.json({ error: 'text required' }, 400)
+    const body = (await c.req.json().catch(() => null)) as { text?: unknown; mentions?: unknown; attachments?: unknown } | null
+    const text = typeof body?.text === 'string' ? body.text.trim() : ''
+    const wanted = Array.isArray(body?.attachments) && body.attachments.length === 0 ? undefined : body?.attachments
+    if (wanted !== undefined && wanted !== null && !uploads) return c.json({ error: 'uploads need a data folder' }, 503)
+    const claimed = uploads ? uploads.claim(wanted) : { ok: true as const, uploads: [] as UploadRow[] }
+    if (!claimed.ok) return c.json({ error: CLAIM_ERRORS[claimed.code], code: claimed.code }, 400)
+    const files = claimed.uploads
+    if (!text && !files.length) return c.json({ error: 'text required' }, 400)
+    const sent = files.length ? { attachments: files.map((f) => f.id) } : {}
 
     if (threadId.startsWith('group:')) {
       const group = db.prepare(`SELECT title FROM threads WHERE id = ? AND kind = 'group'`)
@@ -1091,9 +1195,9 @@ export function createApp(deps: AppDeps): GatewayApp {
       const mentions = resolveMentions(body?.mentions, text, threadMembers(db, threadId))
       if (!mentions.ok) return c.json({ error: mentions.error, code: mentions.code, ...(mentions.params ? { params: mentions.params } : {}) }, 400)
       closeOpenQuestions(threadId)
-      events(threadId).onMessage(insertMessage(db, { threadId, sender: 'user', kind: 'text', content: text }))
-      void startGroupRound(threadId, group.title, text, mentions.ids)
-      return c.json({ ok: true, ...(mentions.ids.length ? { mentions: mentions.ids } : {}) }, 202)
+      postFromOperator(threadId, text, files)
+      void startGroupRound(threadId, group.title, askedWith(text, files), mentions.ids)
+      return c.json({ ok: true, ...(mentions.ids.length ? { mentions: mentions.ids } : {}), ...sent }, 202)
     }
     const dmMentions = resolveMentions(body?.mentions, text, [])
     if (!dmMentions.ok) return c.json({ error: dmMentions.error, code: dmMentions.code }, 400)
@@ -1101,8 +1205,8 @@ export function createApp(deps: AppDeps): GatewayApp {
     const bot = botById(threadId.replace(/^dm:/, ''))
     if (!bot) return c.json({ error: 'unknown thread' }, 404)
 
-    // 一个光秃秃的 👍 就是放行，不该变成一条闲聊
-    if (isThumbsUp(text)) {
+    // 一个光秃秃的 👍 就是放行，不该变成一条闲聊；带着文件的 👍 是在说那个文件
+    if (!files.length && isThumbsUp(text)) {
       const pending = latestPendingApproval(db, threadId)
       if (pending) {
         await settleApproval(pending.id, 'approve')
@@ -1112,11 +1216,12 @@ export function createApp(deps: AppDeps): GatewayApp {
 
     // 先落库并广播：bot 正忙（比如在跑 routine）时，人也要立刻看到自己发出去的话
     closeOpenQuestions(threadId)
-    const stored = insertMessage(db, { threadId, sender: 'user', kind: 'text', content: text })
-    events(threadId).onMessage(stored)
-    waiting.set(threadId, (waiting.get(threadId) ?? new Set()).add(stored.id))
+    const stored = postFromOperator(threadId, text, files)
+    const ids = waiting.get(threadId) ?? new Set<number>()
+    for (const row of stored) ids.add(row.id) // 文字和文件一起等同一个回合
+    waiting.set(threadId, ids)
     void startTurn(bot, threadId, text, { origin: 'operator', alreadyStored: true, prewarm: true, coalesce: true }) // 202 立刻返回，产出走 WS
-    return c.json({ ok: true }, 202)
+    return c.json({ ok: true, ...sent }, 202)
   })
 
   return {
@@ -1125,5 +1230,6 @@ export function createApp(deps: AppDeps): GatewayApp {
     hello: () => ({ type: 'hello', statuses: presenceSnapshot() }),
     runRoutine,
     isBusy: (botId) => turns.isBusy(botId) || workflowRecordings.has(botId),
+    sweepUploads: async () => (uploads ? uploads.sweep(markUploadRemoved) : { orphans: 0, strays: 0, missing: 0 }),
   }
 }
