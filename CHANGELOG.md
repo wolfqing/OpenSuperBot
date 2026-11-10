@@ -43,7 +43,9 @@ names.
 - **Groundwork for the desktop app.** The gateway can run inside the app: it tells the app when it is ready and on
   which port, shuts down in order when the app asks (routines stop, computers and their Chrome close), downloads
   the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's runtime.
-  Run from source, nothing changes.
+  Run from source, nothing changes. A first desktop shell (`desktop/`, Electron 44.9.3) starts the gateway, signs
+  its window in without a sign-in link, restarts a crashed gateway, and shows an error page with the log when it
+  cannot start. There is no download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
 
 ### Changed
 
