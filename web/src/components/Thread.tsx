@@ -7,6 +7,7 @@ import { useT, type T } from '../i18n'
 import { isNotice, noticeText } from '../i18n/describe'
 import { ActivityChip } from './ActivityChip'
 import { ApprovalChip } from './ApprovalChip'
+import { BotAvatar, conversationSeed } from './BotAvatar'
 import { BotRefChip } from './BotRefChip'
 import { LoginChip } from './LoginChip'
 import { Markdown } from './Markdown'
@@ -234,7 +235,7 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   return (
     <main className="thread">
       <header className="thread-header">
-        <span className="avatar">{conversation.emoji}</span>
+        <BotAvatar seed={conversationSeed(conversation)} emoji={conversation.emoji} />
         <span className="thread-name">{conversation.title}</span>
         {conversation.subtitle ? <span className="thread-role">{conversation.subtitle}</span> : null}
         {headerExtra}
@@ -268,7 +269,7 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
                     <div className="row-meta">
                       {speaker ? (
                         <span className="speaker">
-                          <span className="speaker-emoji">{speaker.emoji}</span>
+                          <BotAvatar seed={m.sender} emoji={speaker.emoji} size="xs" />
                           <span className="speaker-name">{speaker.name}</span>
                         </span>
                       ) : null}
@@ -301,7 +302,7 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
                 onMouseDown={(e) => { e.preventDefault(); pick(m) }}
                 onMouseEnter={() => setActive(i)}
               >
-                <span className="mention-emoji">{m.emoji}</span>
+                <BotAvatar seed={m.id} emoji={m.emoji} size="sm" />
                 <span className="mention-name">{m.name}</span>
                 <span className="mention-id">@{m.id}</span>
               </li>

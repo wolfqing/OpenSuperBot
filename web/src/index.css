@@ -76,10 +76,73 @@ body {
 .sidebar-item.selected { background: var(--bg-active); }
 
 .avatar {
-  width: 22px; height: 22px; flex-shrink: 0; border-radius: var(--r-sm);
-  background: #232323; border: 1px solid var(--border);
-  display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+  width: 26px; height: 26px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
   position: relative;
+}
+.avatar svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.avatar-xs { width: 16px; height: 16px; }
+.avatar-sm { width: 18px; height: 18px; }
+.avatar-lg { width: 32px; height: 32px; }
+
+/* ── 头像的动作：状态不靠图例，靠它自己演 ─────────────────────
+   闲着：呼吸、眨眼、偶尔左右张望；thinking：颠着干活、眼睛往上扫；
+   waiting：朝你蹦两下；blocked：摇头、眯眼；done：笑成弯月，蹦一下庆祝。 */
+.av-body { transform-box: fill-box; transform-origin: 50% 100%; animation: av-breathe 4.2s ease-in-out var(--av-delay, 0s) infinite; }
+.av-eyes { transform-box: fill-box; transform-origin: center; animation: av-blink 5.4s var(--av-delay, 0s) infinite; }
+.av-pupil { animation: av-glance 9s ease-in-out var(--av-delay, 0s) infinite; }
+.av-happy { display: none; }
+
+@keyframes av-breathe { 50% { transform: scale(1.015, 0.97); } }
+@keyframes av-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.08); } }
+@keyframes av-glance {
+  0%, 52%, 100% { transform: none; }
+  58%, 70% { transform: translate(1.1px, 0.1px); }
+  76%, 88% { transform: translate(-1.1px, 0.1px); }
+}
+
+.avatar[data-state='thinking'] .av-body { animation: av-work 0.9s cubic-bezier(0.3, 0, 0.3, 1) infinite; }
+.avatar[data-state='thinking'] .av-pupil { animation: av-scan 1.8s ease-in-out infinite; }
+@keyframes av-work {
+  0%, 100% { transform: translateY(0) scale(1.04, 0.94); }
+  45% { transform: translateY(-2.2px) scale(0.97, 1.04); }
+}
+@keyframes av-scan { 0%, 100% { transform: translate(-1.1px, -1.1px); } 50% { transform: translate(1.1px, -1.1px); } }
+
+.avatar[data-state='waiting'] .av-body { animation: av-hop 2.6s ease-in-out infinite; }
+.avatar[data-state='waiting'] .av-pupil { animation: none; transform: translate(0, 0.3px) scale(1.12); transform-box: fill-box; transform-origin: center; }
+@keyframes av-hop {
+  0%, 58%, 100% { transform: none; }
+  64% { transform: translateY(0) scale(1.06, 0.9); }
+  72% { transform: translateY(-3px) rotate(-6deg); }
+  80% { transform: translateY(0) scale(1.04, 0.94); }
+  87% { transform: translateY(-1.6px) rotate(5deg); }
+  94% { transform: none; }
+}
+
+.avatar[data-state='blocked'] .av-body { animation: av-shake 2.4s ease-in-out infinite; }
+.avatar[data-state='blocked'] .av-eyes { animation: none; transform: scaleY(0.55); }
+.avatar[data-state='blocked'] .av-pupil { animation: none; transform: translate(0, 0.9px); }
+@keyframes av-shake {
+  0%, 55%, 100% { transform: none; }
+  62%, 78% { transform: translateX(-1.5px) rotate(-3deg); }
+  70%, 86% { transform: translateX(1.5px) rotate(3deg); }
+  93% { transform: none; }
+}
+
+.avatar[data-state='done'] .av-eyes { display: none; }
+.avatar[data-state='done'] .av-happy { display: block; }
+.avatar[data-state='done'] .av-body { animation: av-cheer 0.8s cubic-bezier(0.3, 0, 0.3, 1) 2, av-breathe 4.2s ease-in-out 1.6s infinite; }
+@keyframes av-cheer {
+  0%, 100% { transform: scale(1.06, 0.9); }
+  50% { transform: translateY(-3.2px) scale(0.96, 1.05); }
+}
+
+/* 小尺寸（群里发言人、@ 菜单）数量多，只当静态头像 */
+.avatar-xs .av-body, .avatar-xs .av-eyes, .avatar-xs .av-pupil,
+.avatar-sm .av-body, .avatar-sm .av-eyes, .avatar-sm .av-pupil { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .avatar .av-body, .avatar .av-eyes, .avatar .av-pupil { animation: none !important; }
 }
 /* 头像右下角的状态点：干活蓝、等你琥珀、卡住红、刚干完绿；闲着不画 */
 .avatar[data-state]::after {
@@ -142,9 +205,9 @@ body {
 .row-inner { display: flex; flex-direction: column; min-width: 0; width: 100%; }
 
 /* 每条消息上方的一行小字：群里是谁在说，停顿之后是几点说的 */
-.row-meta { display: flex; align-items: baseline; gap: 10px; padding: 0 0 5px; color: var(--text-faint); font-size: 12px; }
+.row-meta { display: flex; align-items: center; gap: 10px; padding: 0 0 5px; color: var(--text-faint); font-size: 12px; }
 .row.centered .row-meta { justify-content: center; }
-.speaker { display: flex; gap: 5px; font-weight: 500; }
+.speaker { display: flex; align-items: center; gap: 6px; font-weight: 500; }
 .row-time { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* 换天时的一道分隔线 */
@@ -369,7 +432,6 @@ button.question-option:hover { background: var(--bg-hover); }
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer;
 }
 .mention-menu li.active { background: var(--bg-active); }
-.mention-emoji { width: 18px; text-align: center; }
 .mention-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mention-id { margin-left: auto; color: var(--text-faint); font-size: 12px; }
 

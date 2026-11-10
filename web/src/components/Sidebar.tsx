@@ -4,6 +4,7 @@ import type {
 } from '../types'
 import { useT, type MessageKey, type T } from '../i18n'
 import { isNotice, noticeText } from '../i18n/describe'
+import { BotAvatar, conversationSeed } from './BotAvatar'
 
 /**
  * 单聊就是那位同事的状态。群只说「有人在干活」：等你、卡住、刚干完说的是某一位同事，
@@ -109,7 +110,7 @@ export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBo
             className={`sidebar-item${c.id === selectedId ? ' selected' : ''}`}
             onClick={() => onSelect(c.id)}
           >
-            <span className="avatar" data-state={state} title={stateText(state)}>{c.emoji}</span>
+            <BotAvatar seed={conversationSeed(c)} emoji={c.emoji} size="lg" state={state} title={stateText(state)} />
             <span className="sidebar-text">
               <span className="sidebar-name">
                 {c.title}{state === 'thinking' ? ' …' : ''}

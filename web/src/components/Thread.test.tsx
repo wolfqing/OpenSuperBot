@@ -155,7 +155,7 @@ describe('Thread', () => {
     it('lists the members, narrows them as you type, and sends the one you picked', async () => {
       const onSend = renderGroup()
       await userEvent.type(groupBox(), '@')
-      expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['🔎Scout@researcher', '📈Ticker@market-watch'])
+      expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Scout@researcher', 'Ticker@market-watch'])
       await userEvent.type(groupBox(), 'tic')
       expect(screen.getAllByRole('option')).toHaveLength(1)
       await userEvent.type(groupBox(), '{Enter}')
