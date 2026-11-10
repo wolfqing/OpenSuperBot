@@ -15,6 +15,15 @@ names.
   offered only in a turn you started, refused if the model names them anyway in any other turn, and the attempt
   is logged. Handing work to a teammate still works from any turn.
 
+### Added
+
+- **Ask one teammate in a group.** Type `@` in a group thread to pick who should answer; only they run a turn,
+  and the chief closes with a dispatch table only when it is named too (named alone, it just answers). For other
+  clients, `POST /api/threads/group:…/messages` takes an optional `mentions` list of teammate ids, and an `@id`
+  written in the text counts the same; display names in the text are not matched. A named id that is not in the
+  group is refused with `400`, and so is a non-empty `mentions` in a direct thread. With no one named, the round
+  is the same as before. Requested in #12.
+
 ## [0.5.0] - 2026-11-08
 
 Each teammate can run on its own AI: Claude, OpenAI, xAI, Gemini, MiniMax and other OpenAI-compatible
