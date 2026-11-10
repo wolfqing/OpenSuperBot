@@ -1,0 +1,25 @@
+{
+  "name": "@opensuperbot/desktop",
+  "productName": "OpenSuperBot",
+  "version": "0.6.0-dev",
+  "private": true,
+  "description": "OpenSuperBot desktop app: hosts the gateway and shows the UI in a window",
+  "type": "module",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "electron .",
+    "install-electron": "node node_modules/electron/install.js",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "electron": "44.9.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
