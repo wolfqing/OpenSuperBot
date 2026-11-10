@@ -1,5 +1,5 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, sep } from 'node:path'
+import { dirname, join, posix } from 'node:path'
 
 /**
  * 网关被桌面壳（Electron 的 utilityProcess）托管时要多做的几件事。源码版（pnpm dev / pnpm start）一样都不碰：
@@ -102,11 +102,14 @@ export function sandboxNode(rt: Runtime, dataDir: string): { nodeDir: string; re
   return { nodeDir: bin, readable: [bin, appBundle(rt.execPath)] }
 }
 
-/** macOS 上是最外层的 .app；别的平台是可执行文件所在的目录 */
+/**
+ * macOS 上是最外层的 .app；别的平台是可执行文件所在的目录。
+ * 只在有命令行沙箱的地方用（macOS、Linux），路径一律按 POSIX 拆——在 Windows 上跑测试也一样算
+ */
 export function appBundle(execPath: string): string {
-  const parts = execPath.split(sep)
+  const parts = execPath.split('/')
   const at = parts.findIndex((p) => p.endsWith('.app'))
-  return at > 0 ? parts.slice(0, at + 1).join(sep) : dirname(execPath)
+  return at > 0 ? parts.slice(0, at + 1).join('/') : posix.dirname(execPath)
 }
 
 const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`

@@ -108,7 +108,8 @@ describe('node for commands in the sandbox', () => {
     const shim = join(dataDir, 'runtime', 'bin', 'node')
     expect(got).toEqual({ nodeDir: join(dataDir, 'runtime', 'bin'), readable: [join(dataDir, 'runtime', 'bin'), '/Applications/OpenSuperBot.app'] })
     expect(readFileSync(shim, 'utf8')).toContain(`ELECTRON_RUN_AS_NODE=1 exec '${APP_EXEC}' "$@"`)
-    expect(statSync(shim).mode & 0o111).toBe(0o111)
+    // Windows 没有执行位（那里也没有命令行沙箱，不会用到这个小脚本）
+    if (process.platform !== 'win32') expect(statSync(shim).mode & 0o111).toBe(0o111)
   })
 
   it('finds the app bundle, or the folder of the executable off macOS', () => {
