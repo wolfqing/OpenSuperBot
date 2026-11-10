@@ -29,6 +29,14 @@ names.
 - The README screenshots are retaken on 0.5.0. They show the new name, each teammate's model chip, and a local
   computer's live screen in the panel. The conversation is the built-in scripted demo.
 
+### Fixed
+
+- **Stop works while a teammate is waiting to retry.** When a provider answered `429` or `503` and the gateway
+  was waiting before the next try (up to 30 seconds if the provider sent `Retry-After`), pressing stop did
+  nothing until that wait was over. The wait now ends the moment you stop the turn, and no further request is
+  made. This applies to OpenAI-compatible and Responses connections; Claude connections already behaved this
+  way. Reported in #22.
+
 ## [0.5.0] - 2026-11-08
 
 Each teammate can run on its own AI: Claude, OpenAI, xAI, Gemini, MiniMax and other OpenAI-compatible

@@ -33,8 +33,41 @@ export interface LLM {
 /** 造一个模型客户端要的全部：一个连接（地址、key、模型、接口）加上超时和重试 */
 export type LlmTarget = Pick<Config, 'baseURL' | 'apiKey' | 'model' | 'extraBody' | 'llmTimeoutMs' | 'llmRetries'> & { api?: LlmApi }
 
-export type Sleep = (ms: number) => Promise<void>
-const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+/** 等一段时间。给了 signal 的话，它一中止就该提前回来（不必报错，调用方自己看 signal） */
+export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>
+const realSleep: Sleep = (ms, signal) => new Promise((resolve) => {
+  const done = () => {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', done)
+    resolve()
+  }
+  const timer = setTimeout(done, ms)
+  signal?.addEventListener('abort', done, { once: true })
+})
+
+function stopError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new DOMException('This operation was aborted', 'AbortError')
+}
+
+/**
+ * 重试前的等待也听停止按钮。服务商说「30 秒后再来」时操作者按了停止，就该马上收手：
+ * 不把这 30 秒熬完，也不再发下一次请求。传进来的 sleep 不认 signal 也没关系，这里自己盯着。
+ */
+async function waitToRetry(ms: number, sleep: Sleep, signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) return sleep(ms)
+  if (signal.aborted) throw stopError(signal)
+  let onAbort!: () => void
+  const stopped = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(stopError(signal))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    await Promise.race([sleep(ms, signal), stopped])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+  if (signal.aborted) throw stopError(signal)
+}
 
 /** 这些状态码是「服务端忙/网络抖」：等一等再试有意义；4xx 里的其余错误重试也不会变。 */
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504])
@@ -81,7 +114,7 @@ export async function postJson<T>(
       if (!res.ok) {
         const detail = (await res.text().catch(() => '')).slice(0, 300)
         if (RETRYABLE.has(res.status) && canRetry) {
-          await sleep(retryAfterMs(res) ?? backoffMs(attempt))
+          await waitToRetry(retryAfterMs(res) ?? backoffMs(attempt), sleep, opts.signal)
           continue
         }
         throw new ProviderError(`LLM API ${res.status}: ${detail}`)
@@ -91,7 +124,7 @@ export async function postJson<T>(
       if (err instanceof ProviderError) throw err
       if (opts.signal?.aborted) throw err // 操作者按了停止：立刻收手，不重试
       if (canRetry) {
-        await sleep(backoffMs(attempt))
+        await waitToRetry(backoffMs(attempt), sleep, opts.signal)
         continue
       }
       if (timeout.aborted) throw new Error(`LLM API timed out after ${target.llmTimeoutMs / 1000}s`)
