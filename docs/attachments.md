@@ -4,8 +4,7 @@ You can send a teammate a file along with a message, in a direct thread or a gro
 teammate gets and the API a client uses.
 
 > **Status.** The gateway side is done: any client can upload a file and attach it to a message. The built-in web
-> client shows attached files in the thread but cannot send them yet; that comes next. PDFs come with it — until
-> the gateway can extract their text, it does not accept them.
+> client shows attached files in the thread but cannot send them yet; that comes next.
 
 ## What a teammate gets
 
@@ -13,6 +12,9 @@ teammate gets and the API a client uses.
 - **The file on its own computer**, in the `uploads/` folder of its workspace, so it can open it with `read_file`
   (and with a command, where commands are on). The message says where: `uploads/1a2b3c4d-notes.md`. The first
   eight characters are the upload's id, so two files with the same name do not collide.
+- **The text of a PDF.** `read_file` cannot read a PDF, so the gateway extracts the text when you upload one and
+  puts it next to the document: `uploads/1a2b3c4d-report.pdf` and `uploads/1a2b3c4d-report.pdf.txt`, one heading
+  per page. The teammate is told where both are.
 - **The picture itself, once.** A teammate on a model that can see images gets an attached image in front of the
   model on the first turn it meets it. After that the conversation carries only the line, so a long thread does
   not keep paying for old pictures. During that first turn the image stays in view even when the teammate takes
@@ -29,6 +31,9 @@ If something is missing, the teammate is told so rather than left to guess:
 | The image is over 3.75 MB or wider or taller than 8,000 pixels | "It is too large to show to your model." |
 | More than 8 new images arrive for one turn | The newest 8 are shown; the rest are shown on the next turn. |
 | It has no computer, or the file could not be put there | "It is not on your computer." The gateway tries again on the next turn. |
+| A PDF is a scan, with no text in it | "It has no text to read; it is probably a scan." The document is still on its computer. |
+| A PDF could not be parsed, or took too long | "Its text could not be extracted." |
+| A PDF is longer than 200 pages or 2 million characters | It gets the beginning; the first line of the text file says where it stops. |
 | You removed the file | "Your operator has removed it." |
 
 What a file says is material for the teammate to work with, not instructions. That is the same standing as a page
@@ -38,7 +43,7 @@ it reads or a file it finds; see [security.md](security.md).
 
 | | |
 |---|---|
-| Kinds | PNG, JPEG, WebP, GIF, plain text, Markdown |
+| Kinds | PNG, JPEG, WebP, GIF, PDF, plain text, Markdown |
 | Size | 8 MB per file |
 | Per message | 8 files |
 | Image dimensions | 10,000 pixels a side and 50 million pixels in all |
@@ -66,7 +71,18 @@ Content-Type: application/json
   "name": "chart.png", "mime": "image/png", "size": 48213, "width": 1280, "height": 800 }
 ```
 
-`width` and `height` are there for images only. The gateway decides the kind from the file's content; `mime` has to
+`width` and `height` are there for images only. A PDF has `pages` and `text` instead:
+
+```json
+{ "id": "af39…", "url": "/api/uploads/af39…", "name": "report.pdf", "mime": "application/pdf", "size": 103089,
+  "pages": 2, "text": "ok" }
+```
+
+`text` says whether a teammate will have something to read: `ok` (all of it), `truncated` (the beginning),
+`none` (no text in the document, as in a scan) or `failed` (it could not be parsed). The upload is accepted in all
+four cases. `pages` is missing when the document could not be parsed.
+
+The gateway decides the kind from the file's content; `mime` has to
 agree with it. `name` is used for display and for the file name on the teammate's computer, never as a path on the
 gateway.
 
@@ -139,7 +155,8 @@ it there if it matters.
 
 ## Where files are kept
 
-- **The original:** `<data>/uploads/<id>`, readable by your account only. It is outside every teammate's
+- **The original:** `<data>/uploads/<id>`, readable by your account only, with a PDF's extracted text beside it as
+  `<id>.txt`. It is outside every teammate's
   workspace, so what you see and download in the thread is always the file you sent.
 - **The teammate's copy:** `uploads/` inside its workspace (`<data>/workspaces/<id>/uploads/`). The teammate can
   read it, and with commands on it can change or delete its copy.
@@ -147,5 +164,13 @@ it there if it matters.
 ## What leaves your machine
 
 An image shown to a teammate's model is sent to that model's provider exactly as you uploaded it, including any
-metadata inside the file, such as the location a photo was taken. Text files are not sent as such; the teammate
-reads them with `read_file`, and what it reads becomes part of the conversation with the provider.
+metadata inside the file, such as the location a photo was taken. Text files and PDFs are not sent as such; the
+teammate reads them with `read_file`, and what it reads becomes part of the conversation with the provider. A PDF's
+text is extracted on your machine, by the gateway.
+
+## How a PDF's text is extracted
+
+The gateway reads the text out of the document; it does not render pages or recognise text in images, so a scan
+yields nothing. Two kinds of look-alike characters are put right so the text can be searched: CJK radical forms
+that some fonts use in place of the real character (⽬ for 目, ⻛ for 风), and Latin ligatures (ﬁ for fi).
+Everything else is left as the document has it. Tables come out as lines of text, without their grid.

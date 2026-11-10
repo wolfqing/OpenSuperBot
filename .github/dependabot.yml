@@ -8,6 +8,10 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # unpdf 2.x 要 Node 24，这个项目还支持 Node 22（.nvmrc、CI 都是 22）：等最低版本抬到 24 再放开。
+    ignore:
+      - dependency-name: unpdf
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

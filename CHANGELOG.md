@@ -30,8 +30,15 @@ names.
   view for that turn even when the teammate takes screenshots; later turns carry only its name. Each teammate
   keeps its own record, so one you ask later in a group still gets the file and the picture. Uploads are served
   from `GET /api/uploads/:id`, removed with `DELETE`, and capped in total by `OPENSUPERBOT_UPLOADS_MAX_MB`
-  (2048). The built-in web client shows attached files but cannot send them yet, and PDFs are not accepted yet;
-  both come next. See [docs/attachments.md](docs/attachments.md). Requested in #12.
+  (2048). The built-in web client shows attached files but cannot send them yet; that comes next. See
+  [docs/attachments.md](docs/attachments.md). Requested in #12.
+- **Send a teammate a PDF.** The gateway extracts the text when a PDF is uploaded and puts it beside the document
+  on the teammate's computer (`report.pdf` and `report.pdf.txt`, one heading per page), because `read_file` cannot
+  read a PDF itself. A scan, which has no text, and a document that cannot be parsed are accepted and reported as
+  such, to you in the upload's reply (`text`: `ok`, `truncated`, `none` or `failed`) and to the teammate in the
+  conversation. Extraction runs in a separate thread with limits on memory, time (20 seconds), pages (200) and
+  size. CJK radical look-alikes and Latin ligatures in the extracted text are replaced by the real characters, so
+  the text can be searched. This adds one dependency, `unpdf`, which has no native code.
 
 ### Changed
 
