@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { FieldErrors, downloadBrowser, saveSettings, testConnection, updateConnection, type ConnectionFields } from '../api'
 import { useT, type MessageKey, type T } from '../i18n'
 import { sandboxMissingText } from '../i18n/describe'
-import type { BrowserStatus, CheckResult, ConnectionsState, FieldError, ProviderPreset, SetupInfo } from '../types'
+import type { BrowserStatus, CheckResult, ConnectionsState, FieldError, ModelConnection, ProviderPreset, SetupInfo } from '../types'
 import { CheckLine, NOTES, checkText, fieldText } from './ModelsDialog'
 
 /** 设置里的界面语言：空 = 跟系统 */
@@ -28,9 +28,11 @@ const host = (url: string) => {
  * 首次启动向导：欢迎/语言 → 选服务商 → 粘 key、测试 → 选模型 → 电脑检查 → 进 Chief 的对话。
  * 前四步都能「先看看」进演示模式（stub 模型，不花钱也不联网），之后照样检查电脑。
  */
-export function SetupWizard({ setup, providers, browser, language, onLanguage, onBrowser, onConnections, onDone }: {
+export function SetupWizard({ setup, providers, main, browser, language, onLanguage, onBrowser, onConnections, onDone, onCancel }: {
   setup: SetupInfo
   providers: ProviderPreset[]
+  /** 默认连接此刻的样子：从设置页重开向导、选回同一家时，存着的 key 可以留空沿用 */
+  main?: ModelConnection | undefined
   /** 浏览器此刻的状态：经 /ws 实时更新，比 setup 里那份新 */
   browser: BrowserStatus
   language: LanguageSetting
@@ -40,6 +42,8 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
   onConnections: (next: ConnectionsState) => void
   /** task：点了哪个示例任务（已翻好的原话）；不给 = 自己写 */
   onDone: (task?: string) => void
+  /** 从设置页重开时给：可以中途关掉。首次启动不给，要么配好、要么进演示 */
+  onCancel?: () => void
 }) {
   const t = useT()
   const [step, setStep] = useState<Step>('welcome')
@@ -61,6 +65,8 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
   /** 自定义和本机的（Ollama）地址要人自己确认；其余用预设的 */
   const showAddress = isCustom || preset?.region === 'local'
   const needsPlanOk = Boolean(preset?.plan) && !planOk
+  /** 选的就是默认连接现在那一家、而且存了 key：不粘新的就沿用（网关只在地址没换时才用存着的 key） */
+  const keyKept = Boolean(main && main.provider === providerId && main.key.set)
 
   const go = (next: Step) => { setErrors([]); setStep(next) }
 
@@ -81,8 +87,10 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
     // 换了服务商：刚粘的 key 一起清掉，一家的 key 绝不带去另一家
     setProviderId(p.id)
     setApiKey('')
-    setBaseURL(p.baseURL)
-    setModel(p.defaultModel)
+    // 选回默认连接现在那一家：地址和模型照它现在的（演示模式的 stub 除外）
+    const same = main && main.provider === p.id
+    setBaseURL(same ? main.baseURL : p.baseURL)
+    setModel(same && main.model !== 'stub' ? main.model : p.defaultModel)
     setPlanOk(false)
     setCheck(undefined)
     setModels([])
@@ -144,8 +152,11 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
   return (
     <main className="setup">
       <div className="setup-card" role="dialog" aria-label={t('setup.title')}>
-        <div className="setup-steps" aria-label={t('setup.stepOf', { n: at + 1, total: STEPS.length })}>
-          {STEPS.map((s, i) => <span key={s} className={`setup-dot${i <= at ? ' on' : ''}`} />)}
+        <div className="setup-top">
+          <div className="setup-steps" aria-label={t('setup.stepOf', { n: at + 1, total: STEPS.length })}>
+            {STEPS.map((s, i) => <span key={s} className={`setup-dot${i <= at ? ' on' : ''}`} />)}
+          </div>
+          {onCancel ? <button type="button" className="modal-close" onClick={onCancel} aria-label={t('setup.close')}>×</button> : null}
         </div>
 
         {step === 'welcome' ? (
@@ -235,6 +246,7 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
                   <span className="conn-label">{t('models.form.apiKey')}</span>
                   <input
                     type="password" autoComplete="off" spellCheck={false} autoFocus value={apiKey}
+                    placeholder={keyKept && main ? t('setup.key.kept', { masked: main.key.masked }) : ''}
                     onChange={(e) => { setApiKey(e.target.value); setCheck(undefined) }}
                   />
                 </label>
@@ -264,7 +276,7 @@ export function SetupWizard({ setup, providers, browser, language, onLanguage, o
               <span className="spacer" />
               <button
                 type="submit" className="primary"
-                disabled={check === 'testing' || needsPlanOk || (preset.needsKey && !apiKey.trim()) || (isCustom && (!baseURL.trim() || !model.trim()))}
+                disabled={check === 'testing' || needsPlanOk || (preset.needsKey && !apiKey.trim() && !keyKept) || (isCustom && (!baseURL.trim() || !model.trim()))}
               >
                 {check === 'testing' ? t('models.form.testing') : t('setup.key.test')}
               </button>
@@ -408,7 +420,7 @@ function ComputerStep({ setup, browser, onBrowser, onNext }: {
   )
 }
 
-function BrowserLine({ browser, download }: { browser: BrowserStatus; download: SetupInfo['computers']['download'] }) {
+export function BrowserLine({ browser, download }: { browser: BrowserStatus; download: SetupInfo['computers']['download'] }) {
   const t = useT()
   switch (browser.state) {
     case 'found':

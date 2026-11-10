@@ -1,6 +1,6 @@
 import type {
   Bot, BotLlm, BrowserStatus, CheckResult, ComputerInfo, ConnectionsState, Conversation, FieldError, GatewayEvent, Message, ProviderPreset,
-  RoutineAction, RuleDuration, SetupInfo,
+  RoutineAction, RuleDuration, SettingsView, SetupInfo, AboutInfo,
 } from './types'
 
 /** 网关说「先登录」：界面换成锁屏说明，而不是一片空白。 */
@@ -146,7 +146,9 @@ export async function fetchSetup(): Promise<SetupInfo | null> {
 }
 
 /** 改设置（语言、演示模式、浏览器镜像……）；被拒时抛 FieldErrors */
-export const saveSettings = (patch: Record<string, unknown>) => sendForm<unknown>('PUT', '/api/settings', patch)
+export const saveSettings = (patch: Record<string, unknown>) => sendForm<SettingsView>('PUT', '/api/settings', patch)
+export const fetchSettings = () => getJson<SettingsView>('/api/settings')
+export const fetchAbout = () => getJson<AboutInfo>('/api/about')
 
 /** 提前把同事用的浏览器下好；进度经 /ws 的 setup.browser 推过来 */
 export async function downloadBrowser(): Promise<BrowserStatus> {

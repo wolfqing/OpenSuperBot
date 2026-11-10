@@ -39,7 +39,10 @@ function mockGateway(opts: {
     if (url === '/api/conversations') return json(opts.conversations ?? [conversation({})])
     if (url === '/api/bots') return json([])
     if (url === '/api/setup' && opts.setup) return json(opts.setup)
-    if (url === '/api/settings' && opts.setup && opts.language === undefined) return json({})
+    if (url === '/api/about' && opts.setup) return json({ version: null, dataDir: '/d', logs: 'stdout', runtime: { node: '24', platform: 'darwin', arch: 'arm64' }, computers: 'local' })
+    if (url === '/api/settings' && opts.setup && opts.language === undefined) {
+      return json({ values: { model: 'grok-4.7', language: '', computers: 'auto', browserMirror: '' }, sources: {}, apiKey: { set: true, masked: 'x', source: 'file' }, needsRestart: [] })
+    }
     if (url === '/api/settings' && opts.language !== undefined) {
       return opts.session === 401 ? json({ error: 'sign in' }, 401) : json({ values: { language: opts.language } })
     }
@@ -287,5 +290,22 @@ describe('App', () => {
     await screen.findAllByText('Scout')
     await act(async () => {})
     expect(screen.queryByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeNull()
+  })
+
+  it('opens settings from the sidebar, and can run the setup again and close it', async () => {
+    const computers = {
+      kind: 'local', choice: 'auto', docker: { reachable: false, imageReady: null },
+      browser: { state: 'found', executablePath: '/usr/bin/chrome', source: 'system' }, download: { approxMB: 190, onDiskMB: 370 },
+      browserMirror: { current: '', suggested: null }, sandbox: { available: true },
+    }
+    mockGateway({ setup: { needsSetup: false, chiefId: 'chief', demo: false, computers } })
+    render(<App />)
+    await ready()
+    await act(async () => { (await screen.findByRole('button', { name: 'Settings' })).click() })
+    expect(await screen.findByText('Run from source (no version number)')).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Run the setup again' }).click() })
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenSuperBot' })).toBeInTheDocument()
+    await act(async () => { screen.getByRole('button', { name: 'Close the setup' }).click() })
+    await waitFor(() => expect(document.querySelector('.sidebar')).not.toBeNull())
   })
 })

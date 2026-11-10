@@ -250,6 +250,32 @@ export type SetupInfo = {
   }
 }
 
+/** /api/settings：生效的设置、每项来自哪（env 的在界面上锁定）、改了哪些要重启网关 */
+export type SettingsView = {
+  values: {
+    provider: string
+    baseURL: string
+    model: string
+    vision: boolean
+    language: '' | 'en' | 'zh-CN'
+    computers: 'auto' | 'docker' | 'local'
+    browserMirror: string
+    checkUpdates: boolean
+  }
+  sources: Record<string, 'env' | 'saved' | 'default'>
+  apiKey: { set: boolean; masked: string; source: 'env' | 'file' | 'none' }
+  needsRestart: string[]
+}
+
+/** /api/about：设置页的「关于」。version 为 null = 源码版；logs 'stdout' = 打在运行网关的终端里 */
+export type AboutInfo = {
+  version: string | null
+  dataDir: string
+  logs: string
+  runtime: { node: string; platform: string; arch: string }
+  computers: 'local' | 'docker' | null
+}
+
 /** 模型接口的说法：chat = OpenAI 兼容；anthropic = Claude 原生；responses = OpenAI 的 Responses */
 export type LlmApi = 'chat' | 'anthropic' | 'responses'
 

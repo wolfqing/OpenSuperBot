@@ -16,6 +16,12 @@ names.
   progress and a mirror in China; Docker; the sandbox for commands) and ends in Chief's thread with three example
   tasks to try. Every step before the computer check can switch to demo mode instead. Installs set up with
   environment variables never see it.
+- **A settings page**, behind the gear in the sidebar: the default model with a way into the AI models dialog
+  (or, in demo mode, a button to connect a real model), the language, which computer teammates get (with why
+  automatic picked the one in use, and a note when a change needs a restart), the browser and where it downloads
+  from, and an About section with the version, the data folder, where the logs go and what it runs on. Settings
+  pinned by environment variables are shown read-only with the variable to change. The setup can be run again
+  from here, keeping the saved key when you pick the same service, and closed half way.
 
 ### Fixed
 

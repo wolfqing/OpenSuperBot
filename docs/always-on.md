@@ -136,6 +136,7 @@ curl -X POST -H 'Content-Type: application/json' -H 'X-OpenSuperBot-Key: <key>' 
 | `OPENSUPERBOT_BROWSER` | *(auto-detected)* | Browser executable for local computers; else Chrome, Edge, Chromium or Brave are looked for, then a Chrome for Testing is downloaded into `<data>/browsers` |
 | `OPENSUPERBOT_BROWSER_MIRROR` | *(official)* | Download host for that browser; `https://cdn.npmmirror.com/binaries/playwright` works from China |
 | `OPENSUPERBOT_BOT_MEMORY_MB` / `OPENSUPERBOT_BOT_CPUS` | `2048` / `2` | Per-computer limits (Docker computers only) |
+| `OPENSUPERBOT_VERSION` | *(none)* | The version Settings → About shows; a source checkout shows "run from source" without it |
 
 ## Upgrading
 

@@ -679,3 +679,38 @@ button.question-option:hover { background: var(--bg-hover); }
 .setup-download label.conn-check-row { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .setup-examples { display: flex; flex-direction: column; gap: 6px; }
 .setup-example { text-align: left; line-height: 1.5; padding: 9px 12px; border-radius: var(--r-md); }
+.setup-top { display: flex; align-items: center; justify-content: space-between; }
+
+/* ── 设置页 ─────────────────────────────── */
+.settings { display: flex; flex-direction: column; gap: 4px; }
+.settings-section { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--border); }
+.settings-section:first-of-type { border-top: 0; padding-top: 8px; }
+.settings-heading { margin: 0; font-size: 12px; font-weight: 600; color: var(--text); }
+.settings-line { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+.settings-dim { color: var(--text-faint); font-size: 12px; }
+.settings-locked { margin: 0; color: var(--amber); font-size: 12px; }
+.settings-restart { margin: 0; color: var(--amber); font-size: 12px; }
+.settings-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.settings-buttons .spacer { flex: 1; }
+.settings-buttons button {
+  padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer;
+}
+.settings-buttons button:hover:not(:disabled) { background: var(--bg-hover); }
+.settings-buttons button:disabled { color: var(--text-faint); cursor: default; }
+.settings-buttons button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 500; }
+.settings-buttons button.primary:hover { background: #fff; }
+.settings-choices { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.settings-choices legend { padding: 0; margin-bottom: 4px; font-size: 12px; }
+.settings-choice { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; }
+.settings-choice input { margin-top: 3px; }
+.settings-choice > span { display: flex; flex-direction: column; gap: 1px; }
+.settings-choice-name { color: var(--text); }
+.settings-choices:disabled .settings-choice { cursor: default; opacity: 0.7; }
+.settings-browser { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-dim); }
+.settings-browser code { font-family: var(--mono); font-size: 11px; word-break: break-all; color: var(--text); }
+.settings-about { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 12px; }
+.settings-about dt { color: var(--text-faint); }
+.settings-about dd { margin: 0; color: var(--text); min-width: 0; }
+.settings-about code { font-family: var(--mono); font-size: 11px; word-break: break-all; }
+.sidebar-title > span:first-child { margin-right: auto; }

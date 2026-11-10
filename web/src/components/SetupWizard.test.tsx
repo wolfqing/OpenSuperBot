@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
-import type { BrowserStatus, ConnectionsState, ProviderPreset, SetupInfo } from '../types'
+import type { BrowserStatus, ConnectionsState, ModelConnection, ProviderPreset, SetupInfo } from '../types'
 import { SetupWizard } from './SetupWizard'
 
 const providers: ProviderPreset[] = [
@@ -40,9 +40,11 @@ function mockFetch(routes: Record<string, (body: Record<string, unknown>) => { s
   return calls
 }
 
-function show(opts: { lang?: 'en' | 'zh-CN'; info?: SetupInfo; browser?: BrowserStatus } = {}) {
+function show(opts: { lang?: 'en' | 'zh-CN'; info?: SetupInfo; browser?: BrowserStatus; main?: ModelConnection; cancel?: boolean } = {}) {
   const props = {
     onLanguage: vi.fn(), onBrowser: vi.fn(), onConnections: vi.fn(), onDone: vi.fn(),
+    ...(opts.cancel ? { onCancel: vi.fn() } : {}),
+    ...(opts.main ? { main: opts.main } : {}),
   }
   const info = opts.info ?? setup()
   const ui = (browser: BrowserStatus) => (
@@ -177,5 +179,29 @@ describe('SetupWizard', () => {
     await user.click(screen.getByRole('button', { name: /DeepSeek/ }))
     expect(screen.getByRole('heading', { name: '粘贴 DeepSeek 的 API key' })).toBeInTheDocument()
     expect(screen.getByText('key 只存在这台电脑上，只会发给 DeepSeek。')).toBeInTheDocument()
+  })
+
+  it('reopened from settings: can be closed, and keeps the saved key for the same service', async () => {
+    const calls = mockFetch({ 'POST /api/connections/test': () => ({ body: { ok: true, models: [], modelListed: null } }) })
+    const main: ModelConnection = {
+      id: 'main', name: '', provider: 'deepseek', api: 'chat', baseURL: 'https://api.deepseek.com', model: 'deepseek-pro', vision: true,
+      builtIn: true, key: { set: true, masked: 'sk-…1234', source: 'file' }, locked: [],
+    }
+    const user = userEvent.setup()
+    const w = show({ main, cancel: true, info: { ...setup(), needsSetup: false } })
+    await user.click(screen.getByRole('button', { name: 'Get started' }))
+    await user.click(screen.getByRole('button', { name: /DeepSeek/ }))
+    expect(screen.getByLabelText('API key')).toHaveAttribute('placeholder', 'Saved key (sk-…1234); leave empty to keep it')
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    expect(await screen.findByRole('heading', { name: 'Pick a model' })).toBeInTheDocument()
+    // 没粘新 key：请求里就不带，网关用存着的那把；模型照默认连接现在的
+    expect(calls.at(-1)!.body).toEqual({ connectionId: 'main', provider: 'deepseek', model: 'deepseek-pro' })
+    await user.click(screen.getByRole('button', { name: 'Close the setup' }))
+    expect(w.onCancel).toHaveBeenCalled()
+  })
+
+  it('a first run cannot be closed half way', () => {
+    show()
+    expect(screen.queryByRole('button', { name: 'Close the setup' })).toBeNull()
   })
 })

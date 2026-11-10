@@ -8,6 +8,7 @@ import { BotModelChip, BotModelPicker } from './components/BotModelPicker'
 import { ComputerPanel } from './components/ComputerPanel'
 import { ModelsDialog } from './components/ModelsDialog'
 import { NewBotForm } from './components/NewBotForm'
+import { SettingsDialog } from './components/SettingsDialog'
 import { SetupWizard, type LanguageSetting } from './components/SetupWizard'
 import { Sidebar } from './components/Sidebar'
 import { Thread } from './components/Thread'
@@ -76,6 +77,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
   /** 首次启动向导：网关说要（needsSetup）才出；走完之前一直开着，哪怕中途已经存好了 key */
   const [setup, setSetup] = useState<SetupInfo | null>(null)
   const [wizard, setWizard] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [setupBrowser, setSetupBrowser] = useState<BrowserStatus | null>(null)
 
   const selected = useMemo(
@@ -319,6 +321,20 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
     if (task) sendMessage(chief, task).catch(guard)
   }
 
+  /** 从设置页重开向导：先拿最新的电脑情况，拿不到就不开（老网关） */
+  const reopenWizard = async () => {
+    try {
+      const s = await fetchSetup()
+      if (!s) return
+      setSetup(s)
+      setSettingsOpen(false)
+      setWizard(true)
+    } catch (err) {
+      guard(err)
+    }
+  }
+  const signOut = useCallback(() => setSignedOut(true), [])
+
   if (signedOut) return <SignIn />
   if (wizard && setup) {
     return (
@@ -331,6 +347,8 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
         onBrowser={setSetupBrowser}
         onConnections={setLlms}
         onDone={finishSetup}
+        main={llms?.connections.find((c) => c.builtIn)}
+        {...(setup.needsSetup ? {} : { onCancel: () => { setWizard(false); void loadLlms().catch(guard) } })}
       />
     )
   }
@@ -346,6 +364,7 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
         onSelect={setSelectedId}
         onNewBot={() => { setHireError(undefined); setHiring(true) }}
         {...(llms ? { onModels: () => setModelsOpen(true) } : {})}
+        {...(setup ? { onSettings: () => setSettingsOpen(true) } : {})}
       />
       {selected ? (
         <Thread
@@ -377,6 +396,20 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
           onForgetRule={(rule) => { void onForgetRule(rule) }}
           onWindowDone={onWindowDone}
           onShell={onShell}
+        />
+      ) : null}
+      {settingsOpen && !modelsOpen ? (
+        <SettingsDialog
+          llms={llms}
+          providers={providers}
+          browser={setupBrowser}
+          language={language}
+          onLanguage={onLanguage}
+          onBrowser={setSetupBrowser}
+          onModels={() => setModelsOpen(true)}
+          onWizard={() => void reopenWizard()}
+          onSignedOut={signOut}
+          onClose={() => setSettingsOpen(false)}
         />
       ) : null}
       {llms && modelsOpen ? (
