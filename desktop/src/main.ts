@@ -1,17 +1,18 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir, release } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { BrowserWindow, app, session, shell, utilityProcess } from 'electron'
 import { diagnosticsText } from './diagnostics.js'
 import { openLog } from './logfile.js'
 import { dataUrl, errorPage, pageLang, startingPage } from './pages.js'
 import { appLayout, resources } from './paths.js'
+import { SAFE_WEB_PREFERENCES, downloadPath, permissionAllowed, secureContents } from './security.js'
 import { createSupervisor, type FailReason } from './supervisor.js'
 
 /**
  * 桌面壳：拉起网关（utilityProcess）→ 等它说 ready → 种上会话 cookie → 窗口打开网关的界面。
  * 网关崩了按退避重启；起不来就停在错误页（重试、复制诊断信息、打开日志文件夹）。只允许开一个。
- * 窗口安全的细则（导航、新窗口、权限）在 C3，关窗常驻和托盘在 C5，端口被占换端口在 C4。
+ * 窗口里只有网关的界面：导航、新窗口、权限、下载的规则见 security.ts。关窗常驻和托盘在 C5，端口被占换端口在 C4。
  */
 
 const layout = appLayout({ platform: process.platform, home: homedir(), appData: app.getPath('appData'), env: process.env })
@@ -20,7 +21,8 @@ app.setPath('userData', layout.session)
 
 /** 网关的会话 cookie（gateway/src/auth.ts 的 SESSION_COOKIE） */
 const SESSION_COOKIE = 'osb_session'
-const PORT = 4747
+/** 默认 4747；OPENSUPERBOT_PORT 可以指定（开发时和源码版网关错开）。被占了自动换端口在 C4 */
+const PORT = Number(process.env.OPENSUPERBOT_PORT) || 4747
 const base = (port: number) => `http://127.0.0.1:${port}`
 
 if (!app.requestSingleInstanceLock()) {
@@ -96,19 +98,7 @@ function run() {
   function createWindow() {
     win = new BrowserWindow({
       width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0d0d0d',
-      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
-    })
-    // 错误页上的按钮：osb:retry、osb:logs。别的导航规则在 C3 收紧
-    win.webContents.on('will-navigate', (e, url) => {
-      if (!url.startsWith('osb:')) return
-      e.preventDefault()
-      if (url === 'osb:retry') {
-        showing = 'starting'
-        void win?.loadURL(dataUrl(startingPage(lang())))
-        supervisor.retry()
-      } else if (url === 'osb:logs') {
-        void shell.openPath(layout.logs)
-      }
+      webPreferences: { ...SAFE_WEB_PREFERENCES },
     })
     win.on('closed', () => { win = null })
     if (supervisor.state() === 'running') {
@@ -119,6 +109,65 @@ function run() {
     } else {
       void win.loadURL(dataUrl(startingPage(lang())))
     }
+  }
+
+  /** 错误页上的按钮：osb:retry、osb:logs */
+  function onAction(url: string) {
+    if (url === 'osb:retry') {
+      showing = 'starting'
+      void win?.loadURL(dataUrl(startingPage(lang())))
+      supervisor.retry()
+    } else if (url === 'osb:logs') {
+      void shell.openPath(layout.logs)
+    }
+  }
+
+  /** 外部链接交给系统浏览器；日志只记域名。OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1 时只记不开（冒烟测试用） */
+  function openExternal(url: string) {
+    say(`opening in the browser: ${new URL(url).host}`)
+    if (process.env.OPENSUPERBOT_DESKTOP_NO_EXTERNAL !== '1') void shell.openExternal(url)
+  }
+
+  /** 网关自己的页（屏幕、附件）：App 里开一个窗口，同样的安全设置、同一个登录 */
+  function openInApp(url: string) {
+    const child = new BrowserWindow({ width: 1000, height: 760, title: 'OpenSuperBot', backgroundColor: '#0d0d0d', webPreferences: { ...SAFE_WEB_PREFERENCES } })
+    void child.loadURL(url)
+  }
+
+  // 每一块网页内容（主窗口、App 里开的窗口）都套上同一套规则
+  app.on('web-contents-created', (_e, contents) => {
+    secureContents(contents, {
+      gatewayOrigin: () => base(port),
+      openExternal,
+      openInApp,
+      onAction,
+      log: (line) => say(line),
+    })
+  })
+
+  /** 权限只给网关的页、只给通知和写剪贴板；附件下载存进「下载」文件夹 */
+  function secureSession() {
+    const s = session.defaultSession
+    s.setPermissionRequestHandler((wc, permission, callback, details) => {
+      const ok = permissionAllowed(permission, details.requestingUrl || wc.getURL(), base(port))
+      if (!ok) say(`denied permission ${permission} to ${(details.requestingUrl || wc.getURL()).slice(0, 120)}`)
+      callback(ok)
+    })
+    s.setPermissionCheckHandler((_wc, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, base(port)))
+    s.on('will-download', (_e, item, wc) => {
+      // OPENSUPERBOT_DESKTOP_DOWNLOADS 换个下载文件夹（冒烟测试用，不往真的「下载」里写）
+      const dir = process.env.OPENSUPERBOT_DESKTOP_DOWNLOADS?.trim() || app.getPath('downloads')
+      const path = downloadPath(dir, item.getFilename(), existsSync, sep)
+      item.setSavePath(path)
+      say(`downloading ${item.getFilename()} → ${path}`)
+      // 为了下载才开的空窗口（附件链接在新窗口里打开）：下载开始了就关掉它
+      const owner = BrowserWindow.fromWebContents(wc)
+      if (owner && owner !== win && ['', 'about:blank'].includes(wc.getURL())) owner.close()
+      item.once('done', (_done, state) => {
+        say(`download ${state}: ${path}`)
+        if (state === 'completed') app.dock?.downloadFinished(path)
+      })
+    })
   }
 
   app.on('second-instance', () => {
@@ -151,6 +200,7 @@ function run() {
 
   void app.whenReady().then(() => {
     say(`starting ${app.getVersion()} (Electron ${process.versions.electron}); data in ${layout.data}`)
+    secureSession()
     createWindow()
     supervisor.start()
   })

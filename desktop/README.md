@@ -27,3 +27,12 @@ Everything the app keeps is in one folder, named `OpenSuperBot` whatever the app
 Inside it: `data/` (the gateway's data: database, token, model key, teammates' folders, the downloaded browser),
 `session/` (the window's own cookies and cache) and `logs/gateway.log`. `OPENSUPERBOT_DESKTOP_ROOT` moves the
 whole folder, for development and tests. Deleting the folder removes everything.
+
+The window shows only the gateway's UI. Links to other sites open in your browser; the gateway's own pages
+(a teammate's screen, an attachment) open in an app window, signed in; other kinds of links are blocked.
+Attachments download into your Downloads folder without overwriting a file of the same name. Pages may show
+notifications and write to the clipboard (the Copy buttons), nothing else: no camera, microphone, location or
+clipboard reading.
+
+For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser, and
+`OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder.

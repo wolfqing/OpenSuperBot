@@ -45,7 +45,10 @@ names.
   the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's runtime.
   Run from source, nothing changes. A first desktop shell (`desktop/`, Electron 44.9.3) starts the gateway, signs
   its window in without a sign-in link, restarts a crashed gateway, and shows an error page with the log when it
-  cannot start. There is no download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
+  cannot start. Its window shows only the gateway's UI: other sites open in your browser, the gateway's own pages
+  open in an app window, signed in, other kinds of links are blocked, attachments download to your Downloads
+  folder without overwriting, and pages may only show notifications and write to the clipboard. There is no
+  download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
 
 ### Changed
 
