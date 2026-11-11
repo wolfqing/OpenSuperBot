@@ -5,6 +5,7 @@ import { useT, type MessageKey } from '../i18n'
 import type { AboutInfo, BrowserStatus, ConnectionsState, FieldError, ProviderPreset, SettingsView, SetupInfo } from '../types'
 import { connectionLabel, fieldText } from './ModelsDialog'
 import { BrowserLine, type LanguageSetting } from './SetupWizard'
+import { StartAtLogin } from './StartAtLogin'
 
 type Computers = SettingsView['values']['computers']
 const COMPUTERS: Computers[] = ['auto', 'local', 'docker']
@@ -22,7 +23,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /**
  * 设置页：AI 模型（总表在「AI 模型」窗口里，这里给摘要、入口和重开向导）、语言、同事的电脑（种类、浏览器、镜像）、关于。
  * 被环境变量定死的项只读，说清楚去哪改；改了要重启才生效的，写明。
- * 桌面版才有的开机自启、检查更新等桌面壳做好了再加（C6、C7）。
+ * 桌面版多一块「桌面版」：开机自启（浏览器里打开没有这块）。
  */
 export function SettingsDialog({ llms, providers, browser, language, onLanguage, onBrowser, onModels, onWizard, onSignedOut, onClose }: {
   llms: ConnectionsState | null
@@ -217,6 +218,12 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
                 {errorFor('browserMirror')}
               </form>
             </Section>
+
+            {desktop ? (
+              <Section title={t('settings.app')}>
+                <StartAtLogin where="settings" />
+              </Section>
+            ) : null}
 
             {about ? (
               <Section title={t('settings.about')}>

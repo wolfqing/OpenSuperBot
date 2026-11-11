@@ -5,8 +5,7 @@ in with the gateway's token (a cookie, so there is no sign-in link) and shows th
 is restarted (at most 3 times in 5 minutes); if it cannot start, the window shows an error page with the last log
 lines, a button to copy diagnostics and one to open the log folder. Only one copy runs at a time.
 
-Packaging, the tray, start at login and the rest of the desktop work are still in progress; there is no download
-yet. To run it from a checkout:
+Packaging and updates are still in progress; there is no download yet. To run it from a checkout:
 
 ```bash
 pnpm install
@@ -46,6 +45,13 @@ Attachments download into your Downloads folder without overwriting a file of th
 notifications and write to the clipboard (the Copy buttons), nothing else: no camera, microphone, location or
 clipboard reading.
 
+The app can open when you log in. It is off until you tick it, on the setup wizard's last step or in Settings →
+Desktop app. On macOS it is a login item; if the system will not register it (an unsigned build, say) the app
+writes `~/Library/LaunchAgents/io.github.wolfqing.opensuperbot.plist` instead, which opens the app at login. If
+you turned it off in System Settings → General → Login Items, the app says so rather than going around you. On
+Linux it writes `~/.config/autostart/opensuperbot.desktop` (`$XDG_CONFIG_HOME` if set; the AppImage's own path
+for an AppImage). Run from source it is not offered, because the login item would open a bare Electron.
+
 Pages get no Node and no Electron. The main window's page sees one frozen object, `window.opensuperbot`, with
 `info()` (app version, platform, Electron version) and `loginItem.get()` / `loginItem.set(on)`; every call is
 checked in the main process to come from the gateway's own page, not a frame inside it or the error page.
@@ -53,4 +59,5 @@ checked in the main process to come from the gateway's own page, not a frame ins
 For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser,
 `OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder, and with `OPENSUPERBOT_DESKTOP_TEST=1` the app
 reads `close` and `quit` from standard input, while `OPENSUPERBOT_DESKTOP_QUIT_ANSWERS=cancel,quit` answers the quit
-question in order. The tray icons come from `node desktop/scripts/tray-icons.mjs`.
+question in order, and `OPENSUPERBOT_DESKTOP_LOGIN_HOME` makes start at login act as in an installed app but write
+under that folder instead of your home, never touching the real login items. The tray icons come from `node desktop/scripts/tray-icons.mjs`.

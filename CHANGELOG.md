@@ -75,9 +75,11 @@ names.
   taken (a gateway run from source, say) it takes the next free one and keeps it, so webhook addresses stay
   put; Settings → About shows the port. Closing the window keeps it running, with a menu bar icon and a Dock badge
   for what waits on you; approvals, questions and sign-in requests notify while the window is away; quitting from
-  the app asks first while work or routines are running. Pages get no Node; the gateway's own page gets the app
-  version and start-at-login, checked by the app on every call. There is no
-  download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
+  the app asks first while work or routines are running. It can open when you log in, off unless you tick it on
+  the wizard's last step or in Settings: on macOS as a login item, falling back to a LaunchAgent when the system
+  will not take an unsigned app (and saying so when you have turned it off in System Settings), on Linux as an
+  autostart entry. Pages get no Node; the gateway's own page gets the app version and start-at-login, checked by
+  the app on every call. There is no download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
 
 ### Changed
 

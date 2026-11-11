@@ -15,7 +15,11 @@ export const CHANNELS = {
 } as const
 
 export type DesktopInfo = { version: string; platform: string; electron: string }
-export type LoginItemState = { supported: boolean; enabled: boolean }
+/**
+ * why：supported 为 false 时是 platform（这个系统不支持）或 unpackaged（源码跑的，没打包）；
+ * needs_approval = macOS 上登记了，但被用户在「系统设置 → 通用 → 登录项」里关掉了，要去那里打开。
+ */
+export type LoginItemState = { supported: boolean; enabled: boolean; why?: 'platform' | 'unpackaged' | 'needs_approval' }
 
 /** ipcMain.handle 的事件里用得到的那一点 */
 export type InvokeEvent = { senderFrame: { url: string; parent: unknown } | null }

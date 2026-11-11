@@ -774,6 +774,8 @@ button.question-option:hover { background: var(--bg-hover); }
 .setup-title { font-size: 17px; font-weight: 600; margin: 4px 0 0; }
 .setup-body { margin: 0; color: var(--text-dim); line-height: 1.6; }
 .setup-hint { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }
+.start-at-login { display: flex; flex-direction: column; gap: 4px; }
+.start-at-login label.conn-check-row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
 .setup-link { color: var(--blue); text-decoration: none; white-space: nowrap; }
 .setup-link:hover { text-decoration: underline; }
 .setup-langs { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }

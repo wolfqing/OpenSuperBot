@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { CHANNELS, registerDesktopApi, trustedSender, type InvokeEvent } from '../src/ipc.js'
-import { loginItem } from '../src/loginitem.js'
 
 const GW = 'http://127.0.0.1:4747'
 const top = (url: string): InvokeEvent => ({ senderFrame: { url, parent: null } })
@@ -61,22 +60,5 @@ describe('the calls', () => {
     // 除了 import 那一行，ipcRenderer 只出现在 .invoke 前：不把它整个交给页面，也不用 send / on
     const code = preload.replace(/^import .*$/m, '')
     expect(code).not.toMatch(/ipcRenderer\s*[,)}]|\.send\(|\.on\(/)
-  })
-})
-
-describe('start at login', () => {
-  it('uses the system login items on macOS', () => {
-    let on = false
-    const api = { getLoginItemSettings: () => ({ openAtLogin: on }), setLoginItemSettings: (s: { openAtLogin: boolean }) => { on = s.openAtLogin } }
-    const item = loginItem('darwin', api)
-    expect(item.get()).toEqual({ supported: true, enabled: false })
-    expect(item.set(true)).toEqual({ supported: true, enabled: true })
-  })
-
-  it('says it is not supported elsewhere for now, and changes nothing', () => {
-    const api = { getLoginItemSettings: vi.fn(() => ({ openAtLogin: true })), setLoginItemSettings: vi.fn() }
-    const item = loginItem('linux', api)
-    expect(item.set(true)).toEqual({ supported: false, enabled: false })
-    expect(api.setLoginItemSettings).not.toHaveBeenCalled()
   })
 })

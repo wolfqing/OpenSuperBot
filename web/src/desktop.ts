@@ -3,7 +3,8 @@
  * 只有这几样，主进程还会验调用方是不是网关自己的页。
  */
 export type DesktopInfo = { version: string; platform: string; electron: string }
-export type LoginItemState = { supported: boolean; enabled: boolean }
+/** why：不支持的原因（platform / unpackaged），或 macOS 上被用户在系统设置里关了（needs_approval） */
+export type LoginItemState = { supported: boolean; enabled: boolean; why?: 'platform' | 'unpackaged' | 'needs_approval' }
 export type DesktopApi = {
   info(): Promise<DesktopInfo>
   loginItem: { get(): Promise<LoginItemState>; set(enabled: boolean): Promise<LoginItemState> }

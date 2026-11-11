@@ -159,7 +159,7 @@ describe('SettingsDialog', () => {
   it('shows the desktop app version when opened in the app, and nothing extra in a browser', async () => {
     gateway(view())
     const info = vi.fn(async () => ({ version: '0.6.0', platform: 'darwin', electron: '44.9.3' }))
-    vi.stubGlobal('opensuperbot', { info, loginItem: { get: vi.fn(), set: vi.fn() } })
+    vi.stubGlobal('opensuperbot', { info, loginItem: { get: vi.fn(async () => ({ supported: true, enabled: false })), set: vi.fn() } })
     show()
     expect(await screen.findByText('Desktop app 0.6.0 (Electron 44.9.3)')).toBeInTheDocument()
   })
@@ -169,5 +169,44 @@ describe('SettingsDialog', () => {
     show()
     await screen.findByText('Run from source (no version number)')
     expect(screen.queryByText(/Desktop app/)).toBeNull()
+    expect(screen.queryByLabelText(/when I log in/)).toBeNull()
+  })
+
+  it('in the app, start at login: shows the real state, changes it, and says when macOS has it turned off', async () => {
+    gateway(view())
+    let next: { supported: boolean; enabled: boolean; why?: string } = { supported: true, enabled: false, why: 'needs_approval' }
+    const set = vi.fn(async () => next)
+    vi.stubGlobal('opensuperbot', {
+      info: vi.fn(async () => ({ version: '0.6.0', platform: 'darwin', electron: '44.9.3' })),
+      loginItem: { get: vi.fn(async () => ({ supported: true, enabled: true })), set },
+    })
+    const user = userEvent.setup()
+    show()
+    expect(await screen.findByRole('heading', { name: 'Desktop app' })).toBeInTheDocument()
+    const box = await screen.findByLabelText('Open OpenSuperBot when I log in to this computer')
+    expect(box).toBeChecked()
+    expect(screen.getByText(/Closing the window keeps it running/)).toBeInTheDocument()
+    next = { supported: true, enabled: false }
+    await user.click(box)
+    expect(set).toHaveBeenCalledWith(false)
+    await waitFor(() => expect(box).not.toBeChecked())
+    next = { supported: true, enabled: false, why: 'needs_approval' }
+    await user.click(box)
+    expect(await screen.findByText(/System Settings → General → Login Items/)).toBeInTheDocument()
+    expect(box).not.toBeChecked()
+    set.mockRejectedValueOnce(new Error('EACCES'))
+    await user.click(box)
+    expect(await screen.findByText(/Couldn’t change this/)).toBeInTheDocument()
+  })
+
+  it('in the app run from source, says start at login needs the installed app', async () => {
+    gateway(view())
+    vi.stubGlobal('opensuperbot', {
+      info: vi.fn(async () => ({ version: '0.6.0-dev', platform: 'darwin', electron: '44.9.3' })),
+      loginItem: { get: vi.fn(async () => ({ supported: false, enabled: false, why: 'unpackaged' })), set: vi.fn() },
+    })
+    show({ lang: 'zh-CN' })
+    expect(await screen.findByText('开机自启只在安装版里有，源码跑的不行。')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).toBeNull()
   })
 })

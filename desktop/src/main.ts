@@ -400,13 +400,30 @@ function run() {
     })
   }
 
+  /**
+   * 开机自启。测试钩子 OPENSUPERBOT_DESKTOP_LOGIN_HOME（只在 _TEST=1 时认）：当成打包好的 App，家目录换成这个临时目录，
+   * 系统登录项假装登记不上——macOS 就走 LaunchAgent、Linux 写 .desktop，全落在临时目录里，不碰真的登录项。
+   */
+  function startAtLogin() {
+    const fakeHome = process.env.OPENSUPERBOT_DESKTOP_TEST === '1' ? process.env.OPENSUPERBOT_DESKTOP_LOGIN_HOME?.trim() : undefined
+    if (fakeHome) {
+      return loginItem({
+        platform: process.platform, packaged: true, execPath: '/Applications/OpenSuperBot.app/Contents/MacOS/OpenSuperBot', home: fakeHome,
+        env: { APPIMAGE: '/opt/OpenSuperBot.AppImage' },
+        api: { getLoginItemSettings: () => ({ openAtLogin: false, status: 'not-found' }), setLoginItemSettings: () => {} },
+        log: (line) => say(line),
+      })
+    }
+    return loginItem({ platform: process.platform, packaged: app.isPackaged, execPath: process.execPath, home: homedir(), env: process.env, api: app, log: (line) => say(line) })
+  }
+
   void app.whenReady().then(() => {
     say(`starting ${app.getVersion()} (Electron ${process.versions.electron}); data in ${layout.data}`)
     secureSession()
     registerDesktopApi(ipcMain, {
       gatewayOrigin: () => base(port),
       info: () => ({ version: app.getVersion(), platform: process.platform, electron: process.versions.electron ?? '' }),
-      loginItem: loginItem(process.platform, app),
+      loginItem: startAtLogin(),
       log: (line) => say(line),
     })
     setMenu()
