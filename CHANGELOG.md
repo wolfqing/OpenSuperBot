@@ -49,8 +49,13 @@ names.
   view for that turn even when the teammate takes screenshots; later turns carry only its name. Each teammate
   keeps its own record, so one you ask later in a group still gets the file and the picture. Uploads are served
   from `GET /api/uploads/:id`, removed with `DELETE`, and capped in total by `OPENSUPERBOT_UPLOADS_MAX_MB`
-  (2048). The built-in web client shows attached files but cannot send them yet; that comes next. See
-  [docs/attachments.md](docs/attachments.md). Requested in #12.
+  (2048). See [docs/attachments.md](docs/attachments.md). Requested in #12.
+- **Send files from the app.** A paperclip next to the message box, pasting an image, or dragging files onto the
+  conversation attaches them; they upload at once and send with your message, with or without words. In the
+  thread an image is a thumbnail and any other file a strip to download, and a sent file can be removed. The app
+  turns away a file that is too large or of the wrong kind before uploading it, says why an upload failed and
+  lets you try again, and warns when the teammate's model cannot see images. A message that could not be sent
+  goes back into the message box with the reason, where a failed send used to vanish.
 - **Send a teammate a PDF.** The gateway extracts the text when a PDF is uploaded and puts it beside the document
   on the teammate's computer (`report.pdf` and `report.pdf.txt`, one heading per page), because `read_file` cannot
   read a PDF itself. A scan, which has no text, and a document that cannot be parsed are accepted and reported as

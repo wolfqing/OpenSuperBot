@@ -3,8 +3,21 @@
 You can send a teammate a file along with a message, in a direct thread or a group. This page describes what the
 teammate gets and the API a client uses.
 
-> **Status.** The gateway side is done: any client can upload a file and attach it to a message. The built-in web
-> client shows attached files in the thread but cannot send them yet; that comes next.
+## In the app
+
+- **Attach.** Click the paperclip next to the message box, paste an image from the clipboard, or drag files onto
+  the conversation. Each file uploads at once and shows up above the message box; the send button waits until
+  they are all up.
+- **Send.** With or without words. In a group, `@` works as usual: only the teammates you name get the file now,
+  and the others get it when you ask them later.
+- **Take one out** before sending with its ×. A file that failed to upload says why and offers *Try again*; one
+  that is too large or of a kind that cannot be sent is turned away before it uploads.
+- **In the thread** an image is a thumbnail that opens the original, and any other file is a strip that downloads
+  it. A PDF says how many pages it has, and whether it has text a teammate can read.
+- **Remove** a sent file with the × on it. The app asks first, because the copy on a teammate's computer stays.
+- If the teammate's model cannot see images, the app says so when you attach one. The file still reaches its
+  computer.
+- If a message cannot be sent, the words and the files go back into the message box, with the reason.
 
 ## What a teammate gets
 

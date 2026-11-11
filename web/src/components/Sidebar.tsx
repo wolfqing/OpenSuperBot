@@ -1,5 +1,5 @@
 import type {
-  ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, BotRefPayload, BotStatus, Conversation, LoginPayload,
+  ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, AttachmentPayload, BotRefPayload, BotStatus, Conversation, LoginPayload,
   MemoryPayload, QuestionPayload, ReportPayload, RoutinePayload, ScreenshotPayload, WebhookPayload,
 } from '../types'
 import { useT, type MessageKey, type T } from '../i18n'
@@ -46,6 +46,8 @@ function preview(c: Conversation, t: T): string {
       if (!p?.rule) return `🧠 ${t('sidebar.preview.memoryUpdated')}`
       return `🧠 ${p.removed ? t('sidebar.preview.forgot', { rule: p.rule }) : p.rule}`
     }
+    case 'attachment':
+      return `📎 ${(m.payload as AttachmentPayload | null)?.name ?? t('sidebar.preview.file')}`
     case 'routine_created':
       return `🕐 ${(m.payload as RoutinePayload | null)?.name ?? t('sidebar.preview.routineCreated')}`
     case 'bot_ref':

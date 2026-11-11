@@ -1,14 +1,18 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type {
   ActivityPayload, ApprovalPayload, ApprovalResolvedPayload, AttachmentPayload, BotRefPayload, Conversation, LoginPayload, MemoryPayload,
   Message, QuestionPayload, ReportPayload, RoutinePayload, RuleDuration, ScreenshotPayload, WebhookPayload,
 } from '../types'
+import { ApiError } from '../api'
+import { ACCEPT, isImageType } from '../attachments'
 import { useT, type T } from '../i18n'
-import { isNotice, noticeText } from '../i18n/describe'
+import { errorText, isNotice, noticeText } from '../i18n/describe'
 import { ActivityChip } from './ActivityChip'
 import { ApprovalChip } from './ApprovalChip'
+import { AttachmentChip } from './AttachmentChip'
 import { BotAvatar, conversationSeed } from './BotAvatar'
 import { BotRefChip } from './BotRefChip'
+import { PendingFiles, usePendingFiles, type FilesIO } from './ComposerFiles'
 import { LoginChip } from './LoginChip'
 import { Markdown } from './Markdown'
 import { MemoryChip } from './MemoryChip'
@@ -54,12 +58,18 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const stillMentioned = (text: string, name: string) =>
   new RegExp(`(?:^|[\\s(（])@${escapeRe(name)}(?![\\p{L}\\p{N}])`, 'u').test(text)
 
-export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra, banner }: {
+/** 拖进来的是不是文件（拖一段选中的文字、一个链接不算） */
+const carriesFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
+
+export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra, banner, files }: {
   conversation: Conversation
   messages: Message[]
   thinking: boolean
-  /** mentions：群里点了名的同事 id；没点名就是整个群 */
-  onSend: (text: string, mentions?: string[]) => void
+  /**
+   * mentions：群里点了名的同事 id，没点名就是整个群；attachments：一起发的文件（上传得到的 id）。
+   * 回一个 Promise 的话，它失败了就把字和文件放回输入框，并说明没发出去。
+   */
+  onSend: (text: string, mentions?: string[], attachments?: string[]) => void | Promise<void>
   onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void
   /** 问题卡片上点了选项 */
   onAnswer?: (messageId: number, choices: string[]) => void | Promise<void>
@@ -70,9 +80,16 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   headerExtra?: ReactNode
   /** 标题栏下面一条横幅（比如演示模式） */
   banner?: ReactNode
+  /** 发文件：给了才有回形针、粘贴和拖放 */
+  files?: FilesIO
 }) {
   const t = useT()
   const [draft, setDraft] = useState('')
+  const pending = usePendingFiles(conversation.id, files)
+  const pickerRef = useRef<HTMLInputElement>(null)
+  const [dropping, setDropping] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  useEffect(() => { setSendError(null); setDropping(false) }, [conversation.id])
   const scrollRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLTextAreaElement>(null)
   // 群里打 @ 点名：光标位置决定在补全哪一段；Esc 关掉的那一个 @ 不再弹，换一个 @ 才弹
@@ -126,17 +143,55 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
     box.style.overflowY = wanted > 180 ? 'auto' : 'hidden'
   }, [draft])
 
+  // 有字或者有传好的文件就能发；还有文件在传就等它，免得一半走了一半没走
+  const canSend = !pending.uploading && (draft.trim() !== '' || pending.ready.length > 0)
+
   const submit = () => {
+    if (!canSend) return
     const text = draft.trim()
-    if (!text) return
-    const mentions = picked.filter((m) => stillMentioned(text, m.name)).map((m) => m.id)
+    const named = picked
+    const mentions = named.filter((m) => stillMentioned(text, m.name)).map((m) => m.id)
+    const taken = pending.take()
+    const ids = taken.flatMap((f) => (f.upload ? [f.upload.id] : []))
     setDraft('')
     setPicked([])
     setDismissedAt(null)
+    setSendError(null)
     pinned.current = true
-    if (mentions.length) onSend(text, mentions)
-    else onSend(text)
+    const result = ids.length ? onSend(text, mentions.length ? mentions : undefined, ids)
+      : mentions.length ? onSend(text, mentions) : onSend(text)
+    // 没发出去：把字、点过的名和文件放回来，说清原因，别让人以为发了
+    void Promise.resolve(result).catch((err: unknown) => {
+      setDraft((now) => now || text)
+      setPicked((now) => (now.length ? now : named))
+      pending.restore(taken)
+      const reason = err instanceof ApiError ? errorText(t, err) : err instanceof Error ? err.message : String(err)
+      setSendError(t('thread.notSent', { reason }))
+    })
   }
+
+  const onDrag = (e: DragEvent<HTMLElement>) => {
+    if (!files || !carriesFiles(e)) return
+    e.preventDefault()
+    if (e.type === 'dragleave') {
+      // 只有真离开这块区域才收起提示；在里面的子元素之间移动也会冒 dragleave
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false)
+      return
+    }
+    setDropping(true)
+  }
+  const onDrop = (e: DragEvent<HTMLElement>) => {
+    if (!files || !carriesFiles(e)) return
+    e.preventDefault()
+    setDropping(false)
+    pending.add(Array.from(e.dataTransfer.files))
+  }
+  const notes = [
+    ...(pending.notice ? [pending.notice] : []),
+    // 单聊里才知道是哪位同事的模型：它看不了图也照样收得到文件，只是得让人心里有数
+    ...(files?.seesImages === false && pending.items.some((f) => f.status !== 'error' && f.mime && isImageType(f.mime))
+      ? [t('files.blind', { name: conversation.title })] : []),
+  ]
 
   const pick = (m: Mention) => {
     if (!query) return
@@ -205,15 +260,8 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         return <LoginChip payload={m.payload as LoginPayload} onOpenScreen={() => onOpenScreen?.()} />
       case 'activity': return <ActivityChip payload={m.payload as ActivityPayload} />
       case 'webhook': return <WebhookChip payload={m.payload as WebhookPayload} />
-      // 发文件的界面还没做：别的客户端发来的附件先按名字显示，点了在新标签页看或下载
-      case 'attachment': {
-        const file = m.payload as AttachmentPayload
-        return (
-          <div className="bubble">
-            📎 {file.deleted ? <s>{file.name}</s> : <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a>}
-          </div>
-        )
-      }
+      case 'attachment':
+        return <AttachmentChip payload={m.payload as AttachmentPayload} {...(files?.remove ? { onRemove: files.remove } : {})} />
       case 'question':
         return <QuestionChip payload={m.payload as QuestionPayload} onAnswer={(choices) => onAnswer?.(m.id, choices)} />
       case 'approval_resolved': {
@@ -242,7 +290,14 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   const now = new Date()
 
   return (
-    <main className="thread">
+    <main
+      className={dropping ? 'thread thread-dropping' : 'thread'}
+      onDragEnter={onDrag}
+      onDragOver={onDrag}
+      onDragLeave={onDrag}
+      onDrop={onDrop}
+    >
+      {dropping ? <div className="drop-hint" role="status">{t('thread.dropHere', { name: conversation.title })}</div> : null}
       <header className="thread-header">
         <BotAvatar seed={conversationSeed(conversation)} emoji={conversation.emoji} />
         <span className="thread-name">{conversation.title}</span>
@@ -297,7 +352,32 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         })}
         {thinking ? <div className="row from-bot"><div className="bubble typing">•••</div></div> : null}
       </div>
+      <PendingFiles items={pending.items} notes={notes} alert={sendError} onRemove={pending.remove} onRetry={pending.retry} />
       <footer className="composer">
+        {files ? (
+          <>
+            <input
+              ref={pickerRef}
+              type="file"
+              multiple
+              hidden
+              accept={ACCEPT}
+              onChange={(e) => {
+                pending.add(Array.from(e.target.files ?? []))
+                e.target.value = '' // 同一个文件拿掉以后还能再选一次
+              }}
+            />
+            <button
+              type="button"
+              className="composer-attach"
+              onClick={() => pickerRef.current?.click()}
+              aria-label={t('thread.attach')}
+              title={t('thread.attachTitle')}
+            >
+              📎
+            </button>
+          </>
+        ) : null}
         {menuOpen ? (
           <ul className="mention-menu" id={menuId} role="listbox" aria-label={t('thread.mentionList')}>
             {candidates.map((m, i) => (
@@ -328,6 +408,13 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            // 粘贴的是文件（截图、从访达复制的图）就当附件；粘贴文字照常
+            const pasted = files ? Array.from(e.clipboardData?.files ?? []) : []
+            if (!pasted.length) return
+            e.preventDefault()
+            pending.add(pasted)
+          }}
           aria-autocomplete={members.length ? 'list' : undefined}
           aria-controls={menuOpen ? menuId : undefined}
           aria-activedescendant={menuOpen ? `${menuId}-${current}` : undefined}
@@ -338,7 +425,15 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         {thinking && onStop ? (
           <button className="composer-stop" onClick={onStop} aria-label={t('thread.stop')} title={t('thread.stopTitle')}>■</button>
         ) : null}
-        <button className="composer-send" onClick={submit} disabled={!draft.trim()} aria-label={t('thread.send')}>↑</button>
+        <button
+          className="composer-send"
+          onClick={submit}
+          disabled={!canSend}
+          aria-label={t('thread.send')}
+          title={pending.uploading ? t('thread.sendWaiting') : undefined}
+        >
+          ↑
+        </button>
       </footer>
     </main>
   )

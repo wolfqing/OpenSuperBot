@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { Conversation } from './types'
@@ -36,6 +37,12 @@ function mockGateway(opts: {
     const url = String(input)
     calls.push(url)
     if (init?.method === 'POST') calls.push(`POST ${url} ${String(init.body ?? '')}`)
+    if (init?.method === 'DELETE') calls.push(`DELETE ${url}`)
+    if (url === '/api/uploads' && init?.method === 'POST') {
+      const sent = JSON.parse(String(init.body)) as { name: string; mime: string; data: string }
+      return new Response(JSON.stringify({ id: 'c'.repeat(32), url: `/api/uploads/${'c'.repeat(32)}`, name: sent.name, mime: sent.mime, size: atob(sent.data).length }), { status: 201 })
+    }
+    if (url.startsWith('/api/uploads/') && init?.method === 'DELETE') return new Response(null, { status: 204 })
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
     if (url === '/api/session') return json({ ok: opts.session === undefined }, opts.session ?? 200)
     if (url === '/api/conversations') return json(opts.conversations ?? [conversation({})])
@@ -341,6 +348,38 @@ describe('App', () => {
     await ready()
     expect(await screen.findByText(/grok-4\.7/)).toBeInTheDocument() // 连接拿回来了，才算数
     expect(screen.queryByText(/Replies here are scripted/)).toBeNull()
+  })
+
+  it('uploads a file you attach and sends it with your message; one you take out again is deleted', async () => {
+    const calls = mockGateway()
+    const { container } = render(<App />)
+    await ready()
+    const picker = () => container.querySelector('input[type=file]') as HTMLInputElement
+    await userEvent.upload(picker(), new File(['# plan'], 'plan.md', { type: '' }), { applyAccept: false })
+    await screen.findByText('6 B') // 传完了：显示大小
+    expect(calls).toContain(`POST /api/uploads ${JSON.stringify({ name: 'plan.md', mime: 'text/markdown', data: btoa('# plan') })}`)
+    await userEvent.type(screen.getByRole('textbox'), 'read this{Enter}')
+    await waitFor(() => expect(calls).toContain(
+      `POST /api/threads/dm%3Aresearcher/messages ${JSON.stringify({ text: 'read this', attachments: [{ id: 'c'.repeat(32) }] })}`,
+    ))
+    expect(screen.queryByText('plan.md')).toBeNull()
+
+    await userEvent.upload(picker(), new File(['x'], 'oops.txt', { type: 'text/plain' }), { applyAccept: false })
+    await screen.findByText('1 B')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove oops.txt' }))
+    await waitFor(() => expect(calls).toContain(`DELETE /api/uploads/${'c'.repeat(32)}`))
+  })
+
+  it('says so when the teammate you are sending a picture to cannot see images', async () => {
+    const connection = (vision: boolean) => ({
+      id: 'main', name: 'Default', provider: 'deepseek', api: 'chat', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat',
+      vision, builtIn: true, key: { set: true, masked: 'sk-…', source: 'file' }, locked: [],
+    })
+    mockGateway({ connections: { connections: [connection(false)], bots: {} } })
+    const { container } = render(<App />)
+    await ready()
+    await userEvent.upload(container.querySelector('input[type=file]') as HTMLInputElement, new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), { applyAccept: false })
+    expect(await screen.findByText(/Scout cannot see images/)).toBeInTheDocument()
   })
 
   it('opens the thread a #thread= link names, now and when the link changes, and falls back if it is gone', async () => {
