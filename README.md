@@ -77,6 +77,9 @@ Every line below is implemented and covered by tests — nothing here is a roadm
   existing browser page. The operator reviews the draft before saving it to SQLite; password, one-time-code and
   other sensitive-looking fields are redacted automatically. Local-computer recordings continue across window
   relaunches. Replay and routine scheduling are not part of this slice. See [docs/workflows.md](docs/workflows.md).
+- **Hand it a file.** Attach images, PDFs, text or Markdown files to a message: paperclip, paste or drag. The file
+  lands in the teammate's own folder where it can open it, a model that sees images gets the picture, and a PDF
+  arrives with its text extracted so it can be read. See [docs/attachments.md](docs/attachments.md).
 - **Shared skills.** Drop a Markdown playbook into `<data>/skills/` and every teammate sees it and reads it
   before work it covers. Memory and routines stay with each teammate; skills are shared.
 - **See the work, stop the work.** Every step on its computer — the command, the page, the click — shows live

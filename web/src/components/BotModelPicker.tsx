@@ -11,6 +11,12 @@ export function botModel(state: ConnectionsState, botId: string): string | null 
   return c ? choice.model ?? c.model : null
 }
 
+/** 这位同事此刻用的连接看不看得了图（发图片给它之前提醒一句用） */
+export function botSeesImages(state: ConnectionsState, botId: string): boolean | undefined {
+  const choice = state.bots[botId] ?? { connectionId: 'main', model: null }
+  return (state.connections.find((x) => x.id === choice.connectionId) ?? state.connections[0])?.vision
+}
+
 /** 对话顶部那一小块：这位同事此刻用哪个 AI。点开就能换 */
 export function BotModelChip({ botId, state, providers, onOpen }: {
   botId: string
