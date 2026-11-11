@@ -5,7 +5,7 @@ in with the gateway's token (a cookie, so there is no sign-in link) and shows th
 is restarted (at most 3 times in 5 minutes); if it cannot start, the window shows an error page with the last log
 lines, a button to copy diagnostics and one to open the log folder. Only one copy runs at a time.
 
-Packaging and updates are still in progress; there is no download yet. To run it from a checkout:
+There is no download yet (release builds and update notices are still in progress). To run it from a checkout:
 
 ```bash
 pnpm install
@@ -60,4 +60,30 @@ For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of open
 `OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder, and with `OPENSUPERBOT_DESKTOP_TEST=1` the app
 reads `close` and `quit` from standard input, while `OPENSUPERBOT_DESKTOP_QUIT_ANSWERS=cancel,quit` answers the quit
 question in order, and `OPENSUPERBOT_DESKTOP_LOGIN_HOME` makes start at login act as in an installed app but write
-under that folder instead of your home, never touching the real login items. The tray icons come from `node desktop/scripts/tray-icons.mjs`.
+under that folder instead of your home, never touching the real login items. The tray icons and the app icon come
+from `node desktop/scripts/icons.mjs`.
+
+## Building the installers
+
+```bash
+pnpm desktop:package                                   # this OS: two dmgs on macOS (arm64, x64), AppImage + deb on Linux
+pnpm --filter @opensuperbot/desktop package:linux      # Linux packages (x64, arm64), also from a Mac
+```
+
+The output is in `desktop/release/`. `desktop:package` builds web, gateway and desktop, then
+`desktop/scripts/stage.mjs` lays out what the app carries in `desktop/stage/`: the gateway (`dist` and its
+production dependencies from `pnpm deploy --prod`, flat, no links, without type declarations and source maps), the
+built UI and the preset teammates. They go into the app's resources outside the asar, because the gateway runs
+as a plain file and its dependencies read their own files. `desktop/scripts/after-pack.cjs` then keeps only the
+target's better-sqlite3 prebuild (they are N-API, nothing is rebuilt for Electron) and drops Electron's
+`default_app.asar`. Settings are in `desktop/electron-builder.config.cjs`.
+
+- macOS: ad-hoc signed and not notarized (there is no developer account yet), so the first open needs
+  "Open Anyway" in System Settings → Privacy & Security. The dmg window shows the app next to an Applications
+  shortcut, to drag it there.
+- Linux: the AppImage uses the static AppImage runtime, which needs neither FUSE 2 nor any other system library.
+  The deb installs to `/opt/OpenSuperBot`, with a menu entry and an `opensuperbot` command, and depends on ALSA as well as the
+  usual GTK and NSS libraries.
+
+In China, fetch through the mirrors: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` and
+`ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`.

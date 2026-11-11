@@ -1,6 +1,7 @@
 {
   "name": "@opensuperbot/desktop",
   "productName": "OpenSuperBot",
+  "desktopName": "opensuperbot.desktop",
   "version": "0.6.0-dev",
   "private": true,
   "description": "OpenSuperBot desktop app: hosts the gateway and shows the UI in a window",
@@ -14,12 +15,19 @@
     "start": "electron .",
     "install-electron": "node node_modules/electron/install.js",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package": "electron-builder --config electron-builder.config.cjs",
+    "package:mac": "electron-builder --config electron-builder.config.cjs --mac",
+    "package:linux": "electron-builder --config electron-builder.config.cjs --linux"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "electron": "44.9.3",
+    "electron-builder": "26.18.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
-  }
+  },
+  "homepage": "https://github.com/wolfqing/OpenSuperBot",
+  "author": "wolfqing",
+  "license": "MIT"
 }

@@ -80,6 +80,12 @@ names.
   will not take an unsigned app (and saying so when you have turned it off in System Settings), on Linux as an
   autostart entry. Pages get no Node; the gateway's own page gets the app version and start-at-login, checked by
   the app on every call. There is no download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
+- **Desktop installers, built from a checkout.** `pnpm desktop:package` makes two macOS dmgs (Apple silicon and
+  Intel, ad-hoc signed, not notarized) or, on Linux, an AppImage and a deb for x64 and arm64; the Linux packages
+  can be built on a Mac too. The app carries the gateway with only its production dependencies, outside the asar,
+  and a single SQLite binary for its platform; a dmg is about 135 MB. The AppImage uses the static AppImage
+  runtime, so it opens without FUSE 2 (not installed by default since Ubuntu 22.04). There are no published
+  downloads yet.
 
 ### Changed
 
