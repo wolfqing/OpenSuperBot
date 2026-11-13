@@ -89,6 +89,14 @@ names.
 
 ### Changed
 
+- **Refined workbench UI and macOS window chrome.** The client uses a deeper obsidian zinc surface with hairline
+  borders, consistent inline SVG icons in place of character glyphs, and an inset title bar on macOS so the
+  sidebar, thread header and computer panel meet the window edge. The sidebar groups direct threads and rooms with
+  message timestamps, pins **AI models** and **Settings** to a footer bar, and folds into a drawer on narrow
+  windows. Conversations open on a welcome card with starter prompts when empty, show a pill to jump back to the
+  latest message when scrolled up, open screenshots and image attachments in a lightbox, and group composer
+  attachments, `@` mentions and send/stop controls into one input card. Dialogs close on `Esc` from the topmost
+  layer first, and destructive actions ask in an in-app confirmation dialog instead of `window.confirm`.
 - **Teammates have faces instead of emoji.** Each avatar is a small coloured shape with a pair of eyes, picked
   from the teammate's id so it is the same everywhere. It acts out the teammate's state — bobbing while working,
   hopping when it waits on you, shaking its head when stuck, smiling when done — and holds still when your system
