@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img"
+     aria-label="Opening the unsigned macOS app in three steps: 1. Drag OpenSuperBot into Applications. 2. Open it once and click Done (not Move to Trash) when macOS says OpenSuperBot Not Opened. 3. Open System Settings, Privacy and Security, scroll to Security, and click Open Anyway.">
+  <defs>
+    <style>
+      .bg     { fill: #0d0d0d; }
+      .card   { fill: #161618; stroke: #2f2f35; stroke-width: 1; }
+      .dialog { fill: #1e1e22; stroke: #3a3a42; stroke-width: 1; }
+      .btn    { fill: #2a2a30; stroke: #3f3f48; stroke-width: 1; }
+      .blue   { fill: #2f7cf6; }
+      .danger { fill: #2b1a1c; stroke: #5a2a30; stroke-width: 1; }
+      .t      { fill: #ededed; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .dim    { fill: #9a9aa4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .faint  { fill: #6e6e78; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .red    { fill: #e06c75; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .b      { font-weight: 600; }
+      .arrow  { stroke: #4d9fff; stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4d9fff"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="320" rx="12"/>
+
+  <!-- Step 1 -->
+  <rect class="card" x="20" y="20" width="290" height="280" rx="12"/>
+  <text class="dim b" x="40" y="48" font-size="11">STEP 1 · INSTALL</text>
+  <text class="t b" x="40" y="70" font-size="15">Drag into Applications</text>
+  <rect class="dialog" x="40" y="92" width="250" height="148" rx="10"/>
+  <!-- App icon -->
+  <rect fill="#262936" stroke="#4d9fff" stroke-width="1.2" x="68" y="132" width="54" height="54" rx="12"/>
+  <circle fill="#ededed" cx="86" cy="156" r="3.5"/>
+  <circle fill="#ededed" cx="104" cy="156" r="3.5"/>
+  <text class="t" x="95" y="206" font-size="11" text-anchor="middle">OpenSuperBot</text>
+  <!-- Drag arrow -->
+  <path class="arrow" d="M132,159 L188,159" marker-end="url(#arr)"/>
+  <!-- Applications folder -->
+  <rect fill="#1f3556" stroke="#4d9fff" stroke-width="1" x="198" y="136" width="58" height="46" rx="7"/>
+  <text class="t b" x="227" y="164" font-size="11" text-anchor="middle">A</text>
+  <text class="t" x="227" y="206" font-size="11" text-anchor="middle">Applications</text>
+  <text class="faint" x="40" y="264" font-size="11">Always open it from /Applications so</text>
+  <text class="faint" x="40" y="280" font-size="11">macOS does not run it from a random path.</text>
+
+  <!-- Step 2 -->
+  <rect class="card" x="335" y="20" width="290" height="280" rx="12"/>
+  <text class="dim b" x="355" y="48" font-size="11">STEP 2 · FIRST OPEN</text>
+  <text class="t b" x="355" y="70" font-size="15">Click “Done”, not Trash</text>
+  <rect class="dialog" x="355" y="92" width="250" height="148" rx="10"/>
+  <text class="t b" x="480" y="122" font-size="12" text-anchor="middle">“OpenSuperBot” Not Opened</text>
+  <text class="dim" x="480" y="143" font-size="10.5" text-anchor="middle">Apple could not verify it is free</text>
+  <text class="dim" x="480" y="158" font-size="10.5" text-anchor="middle">of malware.</text>
+  <!-- Done button (highlighted) -->
+  <rect class="blue" x="375" y="176" width="210" height="24" rx="6"/>
+  <text class="t b" x="480" y="192" font-size="11.5" text-anchor="middle">Done  ← click this</text>
+  <!-- Move to Trash button (warn) -->
+  <rect class="danger" x="375" y="206" width="210" height="22" rx="6"/>
+  <text class="red" x="480" y="221" font-size="11" text-anchor="middle">Move to Trash (do not click)</text>
+  <text class="faint" x="355" y="264" font-size="11">That failed open puts OpenSuperBot into</text>
+  <text class="faint" x="355" y="280" font-size="11">Privacy &amp; Security for the next step.</text>
+
+  <!-- Step 3 -->
+  <rect class="card" x="650" y="20" width="290" height="280" rx="12"/>
+  <text class="dim b" x="670" y="48" font-size="11">STEP 3 · ALLOW ONCE</text>
+  <text class="t b" x="670" y="70" font-size="15">Privacy &amp; Security → Open Anyway</text>
+  <rect class="dialog" x="670" y="92" width="250" height="148" rx="10"/>
+  <text class="dim b" x="686" y="115" font-size="10.5">System Settings → Privacy &amp; Security</text>
+  <line stroke="#2f2f35" x1="686" y1="124" x2="904" y2="124"/>
+  <text class="t" x="686" y="145" font-size="10.5">“OpenSuperBot” was blocked to</text>
+  <text class="t" x="686" y="160" font-size="10.5">protect your Mac.</text>
+  <rect class="blue" x="686" y="178" width="128" height="26" rx="6"/>
+  <text class="t b" x="750" y="195" font-size="11.5" text-anchor="middle">Open Anyway</text>
+  <text class="dim" x="686" y="224" font-size="10">Confirm with Touch ID or password.</text>
+  <text class="faint" x="670" y="264" font-size="11">Only needed the first time. Every launch</text>
+  <text class="faint" x="670" y="280" font-size="11">after that opens straight away.</text>
+</svg>

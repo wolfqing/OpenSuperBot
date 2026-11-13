@@ -1,8 +1,9 @@
 # Teammates' computers without Docker
 
-> **Status: the local computer has shipped for macOS and Linux, and for Windows without commands** (step 1 below). The desktop app, the first-run
-> wizard and the Apple container backend are still plans. The two questions this page once left open were settled
-> on 2026-10-30 (see [Decided](#decided)).
+> **Status: local computers (macOS, Linux, and Windows without commands) and the macOS/Linux desktop app with its
+> first-run wizard and Chinese UI have shipped** (steps 1 and 2 below; see [desktop.md](desktop.md)). The Apple
+> container backend on macOS 26 (step 3) and a Windows desktop installer are still planned. The two questions this page
+> once left open were settled on 2026-10-30 (see [Decided](#decided)).
 
 The computers stay **on your machine** — no cloud VMs. What changes is what you have to install first. Many people
 will not install Docker Desktop (or Node, pnpm and git) to try a product, so the default experience should need
@@ -49,17 +50,19 @@ can move a teammate between them.
 
 ## No terminal either
 
-Removing Docker is half of it. The other half is a desktop app that carries the gateway, the UI and the runtime,
-starts at login, lives in the tray and updates itself, plus a first-run wizard: pick a model provider (presets for
-DeepSeek, Kimi, xAI, OpenAI, OpenRouter, a local Ollama), paste a key, test it — or start in demo mode with no key.
-The interface gets a Chinese translation. The desktop technology is not decided yet.
+Removing Docker is half of it. The other half — shipped in v0.6.0 for macOS and Linux ([desktop.md](desktop.md)) — is
+an Electron desktop app that carries the gateway, the UI and the runtime, starts at login when you turn it on, lives
+in the menu bar / tray, checks GitHub Releases once on startup for newer versions (with no auto-updater while builds
+are unsigned), and opens on a first-run wizard: pick a language (English or Chinese), pick a model provider (Claude,
+OpenAI, Gemini, Grok, DeepSeek, Kimi, Qwen, GLM, MiniMax, OpenRouter, a local Ollama, or any compatible endpoint),
+paste a key and test it — or start in demo mode with no key.
 
 ## Order
 
 1. ~~The computer backend interface and local mode on macOS and Linux (browser and files; commands off by default,
-   sandboxed when turned on).~~ Shipped.
-2. The desktop app, first-run wizard and Chinese UI.
-3. The Apple container backend, for strong isolation without Docker on macOS 26.
+   sandboxed when turned on), plus Windows with the browser and folder.~~ Shipped.
+2. ~~The desktop app, first-run wizard and Chinese UI (macOS and Linux).~~ Shipped in v0.6.0 ([desktop.md](desktop.md)).
+3. The Apple container backend, for strong isolation without Docker on macOS 26, and a Windows desktop installer.
 4. Docker stays for servers and anyone who prefers it.
 
 ## Decided

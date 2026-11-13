@@ -82,6 +82,41 @@ export function nodeScriptEnv(rt: Runtime, env: NodeJS.ProcessEnv): NodeJS.Proce
   return rt.electron ? { ...env, ELECTRON_RUN_AS_NODE: '1' } : env
 }
 
+/** AppImage 的启动器（AppRun）往进程环境里塞的变量和路径：只该留给 Electron 自己，不能带给宿主上的浏览器等程序 */
+const APPIMAGE_ONLY_VARS = [
+  'APPIMAGE', 'APPDIR', 'ARGV0', 'OWD', 'APPIMAGE_UUID', 'APPIMAGE_SILENT_INSTALL', 'APPIMAGE_EXIT_AFTER_INSTALL',
+] as const
+const APPIMAGE_PATH_VARS = [
+  'LD_LIBRARY_PATH', 'LD_PRELOAD', 'PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR',
+  'QT_PLUGIN_PATH', 'PERLLIB', 'PYTHONPATH', 'GST_PLUGIN_SYSTEM_PATH', 'GST_PLUGIN_SYSTEM_PATH_1_0',
+] as const
+
+/**
+ * 跑在 AppImage 里时，去掉 AppRun 注入的挂载点变量与库路径（特别是 LD_LIBRARY_PATH 和 GSETTINGS_SCHEMA_DIR——
+ * 带给宿主上的 Chrome 会让它加载到包里的旧系统库或找不到 GSettings schema 而崩掉；清空的变量必须删键，留空串会让 glibc 搜当前目录）。
+ * 不在 AppImage 里时原样拷贝返回。
+ */
+export function outsideAppEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const rawDir = env.APPDIR?.trim()
+  if (!rawDir) return { ...env }
+  const appDir = rawDir.replace(/\/+$/, '') || '/'
+  const inMount = (entry: string) => {
+    const clean = entry.replace(/\/+$/, '')
+    return clean === appDir || clean.startsWith(`${appDir}/`)
+  }
+  const out: NodeJS.ProcessEnv = { ...env }
+  for (const key of APPIMAGE_ONLY_VARS) delete out[key]
+  for (const key of APPIMAGE_PATH_VARS) {
+    const val = out[key]
+    if (val === undefined) continue
+    const kept = val.split(':').filter((seg) => seg !== '' && !inMount(seg))
+    if (kept.length) out[key] = kept.join(':')
+    else delete out[key]
+  }
+  if (out.PYTHONHOME && inMount(out.PYTHONHOME)) delete out.PYTHONHOME
+  return out
+}
+
 /**
  * 沙箱里命令行的 `node` 从哪来，以及沙箱要额外放行读哪些目录。
  * 源码版：网关这个 node 所在的目录（nvm 装的也找得到），不用额外放行。

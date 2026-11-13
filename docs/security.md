@@ -71,11 +71,12 @@ the bot read shows up there.
 1. **Give bots their own accounts, never yours.** Separate email, separate calendar, invited only into what
    they need. A bot with its own account has a blast radius; a bot with yours has your life.
 2. **Sign in to only what the job needs.** Sessions live in the bot's browser profile on your disk
-   (`gateway/data/workspaces/<bot>/.browser`), and they are as powerful as the account behind them.
+   (`gateway/data/bots/<id>/browser` from source, or inside the container for Docker), and they are as powerful as
+   the account behind them.
 3. **Keep the gateway on loopback.** For remote access, tunnel — see [always-on.md](always-on.md). If you
    must bind `0.0.0.0`, the token still guards it, but put TLS in front.
 4. **Cap spend twice**: a limit on the API key at your provider, and `OPENSUPERBOT_DAILY_TOKENS` here.
-5. **Rotate the token if it leaked**: delete `gateway/data/auth-token` and restart. Every browser signs in again.
+5. **Rotate the token if it leaked**: delete `<data>/auth-token` and restart. Every browser signs in again.
 6. **Treat a webhook address like a password.** Anyone holding it can wake that routine with any body. If one
    leaked, delete the routine and ask for a new one.
 
@@ -83,11 +84,39 @@ the bot read shows up there.
 
 | Secret | Where |
 |---|---|
-| Model API key | The `OPENSUPERBOT_API_KEY` environment variable. The gateway never writes it to disk. |
-| Gateway token | `gateway/data/auth-token`, readable by your account only (`0600`; on Windows the gateway resets the file's access list, removes inherited access and grants only you, and warns if it cannot), or `OPENSUPERBOT_TOKEN` if you pin one. Set `OPENSUPERBOT_QUIET_TOKEN=1` to keep it out of service logs. |
+| Model API keys | `OPENSUPERBOT_API_KEY` stays in memory and is never written to disk. Keys saved in the setup wizard or **AI models** live in `<data>/llm-key` and `<data>/llm-keys/<id>`, outside SQLite and outside every container mount and command sandbox, readable only by your account (`0600` in a `0700` folder on macOS and Linux; a reset user-only ACL on Windows). The API only ever returns a saved key masked. |
+| Gateway token | `<data>/auth-token`, readable by your account only (`0600`; on Windows the gateway resets the file's access list, removes inherited access and grants only you, and warns if it cannot), or `OPENSUPERBOT_TOKEN` if you pin one. Set `OPENSUPERBOT_QUIET_TOKEN=1` to keep it out of service logs (the desktop app sets this automatically and scrubs tokens and API keys from diagnostics). |
 | Bot logins | Each bot's browser profile: inside its container (Docker), or under `<data>/bots/<id>/browser` (local). The gateway never sees a password. |
 | Shim token, VNC password | Generated per container at creation, kept in that container's environment. |
 | Webhook keys | One per webhook routine, in the gateway's SQLite database. Shown only in the computer panel — inside the address, and on its own as the *Secret* for GitHub — and in the token-guarded routine listing the panel reads. |
+
+## The desktop app
+
+The Electron shell ([desktop.md](desktop.md)) wraps the same gateway without giving web content desktop privileges:
+
+- **Sandboxed renderer, no Node.** Every window runs with `contextIsolation: true`, `sandbox: true`,
+  `nodeIntegration: false`, `nodeIntegrationInSubFrames: false` and `webviewTag: false`.
+- **Cookie sign-in, no token in URLs or logs.** Main reads `<data>/auth-token` directly and sets the `HttpOnly`,
+  `SameSite=Strict` session cookie for `http://127.0.0.1:<port>` before loading the UI. Logs (`logs/gateway.log`) and
+  copied diagnostics scrub gateway tokens, `Bearer` headers and `sk-` / `xai-` keys.
+- **Narrow, origin-checked preload.** Only the main window receives `window.opensuperbot`, frozen to `info()` and
+  `loginItem.get()` / `loginItem.set(on)`. Every `ipcMain` handler checks `senderFrame` and rejects calls from
+  anything other than the top-level gateway loopback page (`data:` error pages, iframes and other origins are refused
+  and logged).
+- **Locked navigation and permissions.** Windows may navigate only to the gateway's loopback origin (`http:` / `https:`
+  links elsewhere open in your system browser; `file:`, `javascript:` and custom schemes are blocked). Only
+  `notifications` and `clipboard-sanitized-write` are granted to the gateway's page; camera, microphone, geolocation
+  and clipboard reading are denied.
+- **One opt-out release check, no auto-updater.** The macOS build is ad-hoc signed (not notarized) and Linux packages
+  are not signed by a repository key, so the app never downloads or installs code updates automatically. When
+  **Check for a newer version on startup** is enabled in Settings, startup sends one `GET` to
+  `https://api.github.com/repos/wolfqing/OpenSuperBot/releases/latest` with no account or machine id, accepts only
+  `X.Y.Z` release tags whose page is under `https://github.com/wolfqing/OpenSuperBot/releases/`, and shows a download
+  link. Turning the setting off stops the request completely.
+- **No `--no-sandbox` fallback on Linux.** On Ubuntu 24.04+, the `.deb` installs narrow AppArmor `userns` profiles for
+  `/opt/OpenSuperBot/opensuperbot`, its downloaded Chrome for Testing, and `/usr/bin/bwrap`. Under an AppImage where
+  AppArmor blocks unprivileged user namespaces, the commands switch stays locked and explains why rather than running
+  commands or browsers without a sandbox.
 
 ## Local computers
 

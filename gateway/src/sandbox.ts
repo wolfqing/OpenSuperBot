@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -55,7 +55,7 @@ export function detectSandbox(platform: string = process.platform, exists: (p: s
 
 /** 没有沙箱时告诉操作者怎么办 */
 /** 为什么没有沙箱，给界面翻译用；文字版是 sandboxHint */
-export type SandboxMissing = 'install_bwrap' | 'no_sandbox_exec' | 'unsupported_os'
+export type SandboxMissing = 'install_bwrap' | 'userns_blocked' | 'no_sandbox_exec' | 'unsupported_os'
 
 export function sandboxMissing(platform: string = process.platform): SandboxMissing {
   if (platform === 'linux') return 'install_bwrap'
@@ -63,10 +63,43 @@ export function sandboxMissing(platform: string = process.platform): SandboxMiss
   return 'unsupported_os'
 }
 
+export const USERNS_BLOCKED_HINT =
+  'This Linux system blocks unprivileged user namespaces (AppArmor on Ubuntu 24.04+), which bubblewrap needs. '
+  + 'Install the .deb package — it includes the AppArmor profile — or allow userns for /usr/bin/bwrap.'
+
 export function sandboxHint(platform: string = process.platform): string {
   if (platform === 'linux') return 'Install bubblewrap (apt install bubblewrap, or dnf install bubblewrap), then try again.'
   if (platform === 'darwin') return 'macOS normally ships /usr/bin/sandbox-exec; this machine seems to be missing it.'
   return 'Commands on a local computer need macOS or Linux. On Windows, give this teammate a Docker computer instead.'
+}
+
+export type SandboxProbe =
+  | { available: true; sandbox: Sandbox }
+  | { available: false; sandbox: null; why: string; whyCode: SandboxMissing }
+
+/**
+ * 启动时不仅看二进制在不在，Linux 上还用和真沙箱一样的命名空间参数跑一次 /bin/true：
+ * Ubuntu 24.04+ 默认用 AppArmor 拦非特权 user namespace（AppImage 和未配规则的源码运行都会撞上），
+ * 这里先测出来，界面就能直接把命令行开关锁上并说明原因，而不是开了以后报错，更不会加 --no-sandbox 糊弄过去。
+ */
+export function probeSandbox(opts: {
+  platform?: string
+  exists?: (p: string) => boolean
+  run?: (file: string, args: string[]) => unknown
+} = {}): SandboxProbe {
+  const platform = opts.platform ?? process.platform
+  const sandbox = detectSandbox(platform, opts.exists)
+  if (!sandbox) return { available: false, sandbox: null, why: sandboxHint(platform), whyCode: sandboxMissing(platform) }
+  if (sandbox.kind === 'bubblewrap') {
+    const run = opts.run ?? ((file: string, args: string[]) =>
+      execFileSync(file, args, { timeout: 3_000, stdio: 'pipe', env: { PATH: '/usr/bin:/bin' } }))
+    try {
+      run(sandbox.executable, ['--ro-bind', '/', '/', '--unshare-all', '--share-net', '/bin/true'])
+    } catch {
+      return { available: false, sandbox: null, why: USERNS_BLOCKED_HINT, whyCode: 'userns_blocked' }
+    }
+  }
+  return { available: true, sandbox }
 }
 
 const sbString = (s: string) => `"${s.replace(/["\\]/g, (ch) => `\\${ch}`)}"`
@@ -155,8 +188,12 @@ function shellTimeout(requested: number | undefined): number {
  * PATH 里先放网关自己这个 node 所在的目录：用 nvm 之类装的 node 不在系统路径上，没有这一条 bot 就没有 node。
  */
 export function sandboxEnv(c: Confinement, base: NodeJS.ProcessEnv = process.env, nodeDir = c.nodeDir ?? dirname(process.execPath)): NodeJS.ProcessEnv {
+  const appDir = base.APPDIR?.trim().replace(/\/+$/, '')
+  const cleanNode = nodeDir.replace(/\/+$/, '')
+  const inAppImage = Boolean(appDir && (cleanNode === appDir || cleanNode.startsWith(`${appDir}/`)))
+  const systemPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
   return {
-    PATH: `${nodeDir}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
+    PATH: !nodeDir || inAppImage ? systemPath : `${nodeDir}:${systemPath}`,
     HOME: real(c.workspace),
     TMPDIR: real(c.tmp),
     LANG: base.LANG || 'C.UTF-8',

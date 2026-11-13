@@ -3,7 +3,9 @@ import { lstat, mkdir, open, readFile, realpath, stat } from 'node:fs/promises'
 import nodePath, { dirname, join, relative, sep } from 'node:path'
 import { chromium } from 'playwright-core'
 import { createBrowserSession, pageOperations, type BrowserLike, type ContextLike } from './browser-page.js'
+import { CodedError } from './coded-error.js'
 import type { BotComputer, ShellResult } from './computer.js'
+import { outsideAppEnv } from './hosting.js'
 import { createWorkflowRecorder } from './workflow-recorder.js'
 import type { WorkflowRecording } from './workflow-recorder.js'
 
@@ -95,14 +97,28 @@ async function confined(workspaceDir: string, given: string): Promise<string> {
   }
 }
 
+/** Ubuntu 24.04+ 的 AppArmor 拦了非特权 user namespace 时，下载来的 Chromium 建不了沙箱直接崩在 zygote——转成带 code 的人话，绝不加 --no-sandbox */
+export function browserLaunchError(err: unknown): Error {
+  const e = err instanceof Error ? err : new Error(String(err))
+  if (/No usable sandbox!|zygote_host_impl_linux|apparmor_restrict_unprivileged_userns/i.test(e.message)) {
+    return new CodedError(
+      'browser_sandbox_blocked',
+      'Linux blocked the browser’s sandbox (Ubuntu 24.04+ AppArmor restricts unprivileged user namespaces). '
+      + 'Install the .deb package — it includes the AppArmor profile — or install Google Chrome.',
+    )
+  }
+  return e
+}
+
 const defaultLaunch: LocalLaunch = async ({ profileDir, executablePath, headless }) => {
   const context = await chromium.launchPersistentContext(profileDir, {
     executablePath,
     headless,
+    env: outsideAppEnv(process.env),
     viewport: { width: 1280, height: 800 },
     // 上次没正常退出时 Chrome 会弹「恢复页面？」挡住屏幕
     args: ['--hide-crash-restore-bubble'],
-  })
+  }).catch((err: unknown) => { throw browserLaunchError(err) })
   let open = true
   context.on('close', () => { open = false })
   return {

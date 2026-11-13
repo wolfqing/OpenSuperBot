@@ -5,14 +5,17 @@ import {
   stopThread, updateRoutine, uploadFile,
 } from './api'
 import { BotModelChip, BotModelPicker, botModel, botSeesImages } from './components/BotModelPicker'
+import { ConfirmDialog, useEscape } from './components/ConfirmDialog'
 import { DemoBanner } from './components/DemoBanner'
 import { ComputerPanel } from './components/ComputerPanel'
+import { XIcon } from './components/Icons'
 import { ModelsDialog } from './components/ModelsDialog'
 import { NewBotForm } from './components/NewBotForm'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SetupWizard, type LanguageSetting } from './components/SetupWizard'
 import { Sidebar } from './components/Sidebar'
 import { Thread } from './components/Thread'
+import { desktopApi } from './desktop'
 import { I18nProvider, browserLanguages, pickLang, useT, type Lang } from './i18n'
 import { errorText } from './i18n/describe'
 import { applyHello, applyStatus, clearDone } from './presence'
@@ -53,6 +56,13 @@ export default function App() {
     })
     return () => { live = false }
   }, [])
+  useEffect(() => {
+    const api = desktopApi()
+    if (!api) return
+    void Promise.resolve(api.info()).then((d) => {
+      if (d?.platform === 'darwin') document.documentElement.dataset.desktop = 'darwin'
+    }).catch(() => {})
+  }, [])
   useEffect(() => { document.documentElement.lang = lang }, [lang])
   return <I18nProvider lang={lang}><Workspace language={setting} onLanguage={setSetting} /></I18nProvider>
 }
@@ -80,6 +90,9 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
   const [wizard, setWizard] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [setupBrowser, setSetupBrowser] = useState<BrowserStatus | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; confirmLabel: string; run: () => void } | null>(null)
+  useEscape(hiring ? () => setHiring(false) : undefined)
 
   // #thread=<id>：打开就是那条对话。桌面版点系统通知、别人发来的链接都走这个
   useEffect(() => {
@@ -268,14 +281,36 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
     void loadPanel(botId)
   }
 
-  const onRoutine = async (id: number, action: RoutineAction) => {
-    if (action === 'delete' && !window.confirm(t('app.confirmDeleteRoutine'))) return
+  const toggleScreen = () => {
+    if (!selected || selected.kind !== 'dm') return
+    const botId = selected.members[0]
+    if (!botId) return
+    if (panel?.botId === botId) {
+      showPanel(null)
+      return
+    }
+    openScreen()
+  }
+
+  const runRoutine = async (id: number, action: RoutineAction) => {
     try {
       await updateRoutine(id, action)
       if (panel) await loadPanel(panel.botId)
     } catch (err) {
       guard(err)
     }
+  }
+
+  const onRoutine = (id: number, action: RoutineAction) => {
+    if (action === 'delete') {
+      setConfirmDialog({
+        message: t('app.confirmDeleteRoutine'),
+        confirmLabel: t('confirm.delete'),
+        run: () => { void runRoutine(id, action) },
+      })
+      return
+    }
+    void runRoutine(id, action)
   }
 
   const onRevokeRule = async (id: number) => {
@@ -287,14 +322,16 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
     }
   }
 
-  const onForgetRule = async (rule: string) => {
-    if (!panel || !window.confirm(t('app.confirmForgetRule', { rule }))) return
-    try {
-      await forgetMemoryRule(panel.botId, rule)
-      await loadPanel(panel.botId)
-    } catch (err) {
-      guard(err)
-    }
+  const onForgetRule = (rule: string) => {
+    if (!panel) return
+    const botId = panel.botId
+    setConfirmDialog({
+      message: t('app.confirmForgetRule', { rule }),
+      confirmLabel: t('confirm.forget'),
+      run: () => {
+        void forgetMemoryRule(botId, rule).then(() => loadPanel(botId)).catch(guard)
+      },
+    })
   }
 
   /** 本机模式的两个动作：网关拒了（没沙箱、自检失败）就把原因抛回面板显示；不管成败都刷新面板 */
@@ -389,6 +426,8 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
         statuses={statuses}
         onSelect={setSelectedId}
         onNewBot={() => { setHireError(undefined); setHiring(true) }}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         {...(llms ? { onModels: () => setModelsOpen(true) } : {})}
         {...(setup ? { onSettings: () => setSettingsOpen(true) } : {})}
       />
@@ -411,11 +450,14 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
             remove: (id) => { removeUpload(id).catch(guard) },
             ...(seesImages === undefined ? {} : { seesImages }),
           }}
-          onDecide={(approvalId, decision, remember, items) => {
+          onDecide={(approvalId, decision, remember, items) => (
             resolveApproval(approvalId, decision, remember, items).catch(guard)
-          }}
+          )}
           onAnswer={(messageId, choices) => answerQuestion(messageId, choices).catch((err) => { guard(err); throw err })}
           onOpenScreen={openScreen}
+          onToggleScreen={toggleScreen}
+          panelOpen={Boolean(selected.kind === 'dm' && selected.members[0] && panel?.botId === selected.members[0])}
+          onToggleSidebar={() => setSidebarOpen((o) => !o)}
           onStop={() => { if (threadId) stopThread(threadId).catch(guard) }}
           banner={demoBanner}
           headerExtra={llms && selected.kind === 'dm' && selected.members[0] ? (
@@ -430,9 +472,9 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
           info={panel.info}
           botName={selected?.title ?? ''}
           onClose={() => showPanel(null)}
-          onRoutine={(id, action) => { void onRoutine(id, action) }}
+          onRoutine={onRoutine}
           onRevokeRule={(id) => { void onRevokeRule(id) }}
-          onForgetRule={(rule) => { void onForgetRule(rule) }}
+          onForgetRule={onForgetRule}
           onWindowDone={onWindowDone}
           onShell={onShell}
         />
@@ -467,11 +509,29 @@ function Workspace({ language, onLanguage }: { language: LanguageSetting; onLang
       ) : null}
       {hiring ? (
         <div className="modal-scrim" onClick={() => setHiring(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">{t('app.hireTitle')}</div>
+          <div className="modal" role="dialog" aria-label={t('app.hireTitle')} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">{t('app.hireTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setHiring(false)} aria-label={t('hire.cancel')} title={t('hire.cancel')}>
+                <XIcon size={15} />
+              </button>
+            </div>
             <NewBotForm onCreate={(n, r) => void hire(n, r)} onCancel={() => setHiring(false)} error={hireError} />
           </div>
         </div>
+      ) : null}
+      {confirmDialog ? (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          cancelLabel={t('confirm.cancel')}
+          onConfirm={() => {
+            const run = confirmDialog.run
+            setConfirmDialog(null)
+            run()
+          }}
+          onCancel={() => setConfirmDialog(null)}
+        />
       ) : null}
     </div>
   )

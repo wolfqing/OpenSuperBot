@@ -5,6 +5,8 @@ import { sandboxMissingText } from '../i18n/describe'
 import type { BrowserStatus, CheckResult, ConnectionsState, FieldError, ModelConnection, ProviderPreset, SetupInfo } from '../types'
 import { CheckLine, NOTES, checkText, fieldText } from './ModelsDialog'
 import { StartAtLogin } from './StartAtLogin'
+import { useEscape } from './ConfirmDialog'
+import { XIcon } from './Icons'
 
 /** 设置里的界面语言：空 = 跟系统 */
 export type LanguageSetting = '' | 'en' | 'zh-CN'
@@ -47,6 +49,7 @@ export function SetupWizard({ setup, providers, main, browser, language, onLangu
   onCancel?: () => void
 }) {
   const t = useT()
+  useEscape(onCancel)
   const [step, setStep] = useState<Step>('welcome')
   const [demo, setDemo] = useState(false)
   const [providerId, setProviderId] = useState<string>('')
@@ -157,7 +160,11 @@ export function SetupWizard({ setup, providers, main, browser, language, onLangu
           <div className="setup-steps" aria-label={t('setup.stepOf', { n: at + 1, total: STEPS.length })}>
             {STEPS.map((s, i) => <span key={s} className={`setup-dot${i <= at ? ' on' : ''}`} />)}
           </div>
-          {onCancel ? <button type="button" className="modal-close" onClick={onCancel} aria-label={t('setup.close')}>×</button> : null}
+          {onCancel ? (
+            <button type="button" className="modal-close" onClick={onCancel} aria-label={t('setup.close')} title={t('setup.close')}>
+              <XIcon size={15} />
+            </button>
+          ) : null}
         </div>
 
         {step === 'welcome' ? (

@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Intel macOS 免费 runner 已退役：在 Apple Silicon 上一次交叉打出 arm64 和 x64 两个 dmg
+          - label: macOS (arm64 + x64)
+            os: macos-latest
+            package: pnpm --filter @opensuperbot/desktop run package:mac
+            artifact: desktop-macos
+            globs: desktop/release/*.dmg
+          - label: Linux x64
+            os: ubuntu-24.04
+            package: pnpm --filter @opensuperbot/desktop run package:linux:x64
+            artifact: desktop-linux-x64
+            globs: |
+              desktop/release/*-x86_64.AppImage
+              desktop/release/*-amd64.deb
+          - label: Linux arm64
+            os: ubuntu-24.04-arm
+            package: pnpm --filter @opensuperbot/desktop run package:linux:arm64
+            artifact: desktop-linux-arm64
+            globs: |
+              desktop/release/*-arm64.AppImage
+              desktop/release/*-arm64.deb
+    steps:
+      - uses: actions/checkout@v7
+      - name: Match tag against desktop/package.json
+        if: github.ref_type == 'tag'
+        run: |
+          VERSION="v$(node --input-type=commonjs -p "require('./desktop/package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match desktop/package.json ($VERSION)"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stage gateway, web UI, and built-in teammates
+        run: node desktop/scripts/stage.mjs
+      - name: Build installers
+        run: ${{ matrix.package }}
+      - name: Verify ad-hoc signatures (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict desktop/release/mac-arm64/OpenSuperBot.app
+          codesign --verify --deep --strict desktop/release/mac/OpenSuperBot.app
+      - name: Packaged app smoke test (macOS)
+        if: runner.os == 'macOS'
+        env:
+          SMOKE_EXPECT_SANDBOX: '1'
+        run: pnpm run smoke:desktop desktop/release/mac-arm64/OpenSuperBot.app --real-data-dir
+      - name: Install .deb and smoke test packaged app (Linux)
+        if: runner.os == 'Linux'
+        env:
+          SMOKE_EXPECT_SANDBOX: '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb ./desktop/release/*.deb
+          xvfb-run -a pnpm run smoke:desktop /opt/OpenSuperBot/opensuperbot --real-data-dir
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.globs }}
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub Release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Verify all six installers and write SHA256SUMS.txt
+        run: |
+          VERSION="$(node --input-type=commonjs -p "require('./desktop/package.json').version")"
+          cd dist
+          EXPECTED=(
+            "OpenSuperBot-${VERSION}-mac-arm64.dmg"
+            "OpenSuperBot-${VERSION}-mac-x64.dmg"
+            "OpenSuperBot-${VERSION}-linux-x86_64.AppImage"
+            "OpenSuperBot-${VERSION}-linux-arm64.AppImage"
+            "OpenSuperBot-${VERSION}-linux-amd64.deb"
+            "OpenSuperBot-${VERSION}-linux-arm64.deb"
+          )
+          for f in "${EXPECTED[@]}"; do
+            if [ ! -s "$f" ]; then
+              echo "::error::Missing or empty release asset: $f"
+              ls -la
+              exit 1
+            fi
+          done
+          if [ "$(ls -1 | wc -l)" -ne "${#EXPECTED[@]}" ]; then
+            echo "::error::Unexpected extra files in dist/"
+            ls -la
+            exit 1
+          fi
+          sha256sum "${EXPECTED[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --draft \
+              --verify-tag \
+              --title "OpenSuperBot $GITHUB_REF_NAME" \
+              --generate-notes
+          fi

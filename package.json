@@ -1,6 +1,7 @@
 {
   "name": "opensuperbot",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=22"
@@ -12,7 +13,8 @@
     "desktop": "pnpm build && pnpm --filter @opensuperbot/desktop build && pnpm --filter @opensuperbot/desktop start",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --workspace-concurrency=1 test",
-    "desktop:package": "node desktop/scripts/stage.mjs && pnpm --filter @opensuperbot/desktop package"
+    "desktop:package": "node desktop/scripts/stage.mjs && pnpm --filter @opensuperbot/desktop package",
+    "smoke:desktop": "pnpm --filter @opensuperbot/gateway exec tsx ../scripts/smoke-desktop.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

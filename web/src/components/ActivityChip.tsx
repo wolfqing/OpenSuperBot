@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ActivityPayload } from '../types'
 import { useT } from '../i18n'
+import { ChevronRightIcon } from './Icons'
 
 function formatMs(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
@@ -17,13 +18,14 @@ export function ActivityChip({ payload }: { payload: ActivityPayload }) {
   return (
     <div className={`activity-chip${payload.done ? '' : ' running'}`}>
       <button className="activity-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {!payload.done ? <span className="activity-pulse" aria-hidden="true" /> : null}
         <span className="activity-label">{t(payload.done ? 'activity.worked' : 'activity.working')}</span>
         <span className="activity-meta">
           {t(steps.length === 1 ? 'activity.stepOne' : 'activity.stepMany', { count: steps.length })}
           {failed ? ` · ${t('activity.failed', { count: failed })}` : ''}
           {payload.done && totalMs ? ` · ${formatMs(totalMs)}` : ''}
         </span>
-        <span className="activity-caret">{open ? '▾' : '▸'}</span>
+        <span className={`activity-caret${open ? ' open' : ''}`}><ChevronRightIcon /></span>
       </button>
       {current && !open ? (
         <div className="activity-current">

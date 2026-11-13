@@ -13,6 +13,7 @@ import { appLayout, resources } from './paths.js'
 import { DEFAULT_PORT, choosePort, portInUse, probePort, readState, writeState } from './port.js'
 import { SAFE_WEB_PREFERENCES, downloadPath, permissionAllowed, secureContents } from './security.js'
 import { createSupervisor, type FailReason } from './supervisor.js'
+import { checkForUpdate, type AvailableUpdate } from './updates.js'
 
 /**
  * 桌面壳：拉起网关（utilityProcess）→ 等它说 ready → 种上会话 cookie → 窗口打开网关的界面。
@@ -57,6 +58,8 @@ function run() {
   /** 发过通知的事（审批卡片就地更新时 id 不变，不重复打扰） */
   const notified = new Set<string>()
   let lastTray = ''
+  let availableUpdate: AvailableUpdate | null = null
+  let checkedForUpdate = false
 
   const lang = () => pageLang(app.getLocale())
   const say = (line: string) => log.write(`[desktop] ${line}`)
@@ -85,6 +88,10 @@ function run() {
       say(`gateway ready on ${base(p)}`)
       void openGateway()
       watch()
+      if (!checkedForUpdate) {
+        checkedForUpdate = true
+        void maybeCheckForUpdate()
+      }
     },
     restarting: (attempt, delayMs) => say(`gateway crashed; restart #${attempt} in ${delayMs / 1000}s`),
     failed: (reason) => {
@@ -174,22 +181,41 @@ function run() {
     }, 300)
   }
 
-  /** 托盘菜单：打开、谁在干活、几件事等你、退出；Dock 角标和 macOS 菜单栏上的数字 = 等你的件数 */
+  /** 启动后只查一次 GitHub 最新 release（设置里关了就不发外部请求）；源码跑的与冒烟测试默认跳过 */
+  async function maybeCheckForUpdate() {
+    const testUrl = process.env.OPENSUPERBOT_DESKTOP_TEST === '1' ? process.env.OPENSUPERBOT_DESKTOP_RELEASES_URL?.trim() : undefined
+    if (!testUrl && (!app.isPackaged || process.env.OPENSUPERBOT_DESKTOP_NO_EXTERNAL === '1')) return
+    const found = await checkForUpdate({
+      currentVersion: app.getVersion(),
+      gatewayBase: base(port),
+      token: token(),
+      releasesUrl: testUrl,
+      log: (line) => say(line),
+    })
+    if (found) {
+      availableUpdate = found
+      updateTray()
+    }
+  }
+
+  /** 托盘菜单：打开、（若有）新版下载、谁在干活、几件事等你、退出；Dock 角标和 macOS 菜单栏上的数字 = 等你的件数 */
   function updateTray() {
     const t = texts(lang())
     const lines = trayStatus(summary, lang())
     const waiting = summary?.waiting ?? 0
     app.setBadgeCount(waiting)
     if (!tray) return
+    const upd = availableUpdate
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: t.open, click: showWindow },
+      ...(upd ? [{ label: t.update(upd.version), click: () => openExternal(upd.url) }] : []),
       { type: 'separator' },
       ...lines.map((label) => ({ label, enabled: false })),
       { type: 'separator' },
       { label: t.quit, click: () => void userQuit() },
     ]))
     if (process.platform === 'darwin') tray.setTitle(waiting ? String(waiting) : '')
-    const now = `${lines.join(' · ')} · badge ${waiting}`
+    const now = `${lines.join(' · ')} · badge ${waiting}${upd ? ` · update ${upd.version}` : ''}`
     if (now !== lastTray) say(`tray: ${now}`)
     lastTray = now
   }
@@ -259,7 +285,8 @@ function run() {
 
   function createWindow() {
     win = new BrowserWindow({
-      width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0d0d0d',
+      width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0b0c0f',
+      ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 16 } } : {}),
       // 只有主窗口带 preload（window.opensuperbot）；App 里另开的窗口（屏幕、附件）不需要
       webPreferences: { ...SAFE_WEB_PREFERENCES, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) },
     })
@@ -301,7 +328,7 @@ function run() {
 
   /** 网关自己的页（屏幕、附件）：App 里开一个窗口，同样的安全设置、同一个登录 */
   function openInApp(url: string) {
-    const child = new BrowserWindow({ width: 1000, height: 760, title: 'OpenSuperBot', backgroundColor: '#0d0d0d', webPreferences: { ...SAFE_WEB_PREFERENCES } })
+    const child = new BrowserWindow({ width: 1000, height: 760, title: 'OpenSuperBot', backgroundColor: '#0b0c0f', webPreferences: { ...SAFE_WEB_PREFERENCES } })
     void child.loadURL(url)
   }
 
@@ -422,7 +449,7 @@ function run() {
     secureSession()
     registerDesktopApi(ipcMain, {
       gatewayOrigin: () => base(port),
-      info: () => ({ version: app.getVersion(), platform: process.platform, electron: process.versions.electron ?? '' }),
+      info: () => ({ version: app.getVersion(), platform: process.platform, electron: process.versions.electron ?? '', update: availableUpdate }),
       loginItem: startAtLogin(),
       log: (line) => say(line),
     })

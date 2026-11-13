@@ -312,6 +312,7 @@ export const en = {
   'error.image_missing': 'The bot computer image {image} is not built yet. Run: {command}',
   'error.browser_missing': 'OPENSUPERBOT_BROWSER points to {path}, which does not exist.',
   'error.browser_download_failed': 'The browser download failed: {detail} Install Google Chrome instead, or point OPENSUPERBOT_BROWSER at a Chromium-based browser.',
+  'error.browser_sandbox_blocked': 'Linux blocked the browser’s sandbox (Ubuntu 24.04+ AppArmor restricts unprivileged user namespaces). Install the .deb package — it includes the AppArmor profile — or install Google Chrome.',
   'error.no_screen': 'This computer has no screen to stream.',
   'error.too_large': 'That file is over 8 MB.',
   'error.type_not_allowed': 'That kind of file cannot be sent. Images, PDFs, text and Markdown files can.',
@@ -324,6 +325,7 @@ export const en = {
   'error.too_many_attachments': 'A message can carry 8 files.',
 
   'sandbox.install_bwrap': 'Install bubblewrap (apt install bubblewrap, or dnf install bubblewrap), then try again.',
+  'sandbox.userns_blocked': 'This Linux system blocks unprivileged user namespaces (Ubuntu 24.04+ AppArmor), which bubblewrap needs. Install the .deb package — it includes the AppArmor profile — or allow userns for /usr/bin/bwrap.',
   'sandbox.no_sandbox_exec': 'macOS normally ships /usr/bin/sandbox-exec; this machine seems to be missing it.',
   'sandbox.unsupported_os': 'Commands on a local computer need macOS or Linux. On Windows, give this teammate a Docker computer instead.',
 
@@ -448,6 +450,10 @@ export const en = {
   'startAtLogin.needsApproval': 'macOS has this turned off for OpenSuperBot. Turn it on in System Settings → General → Login Items.',
   'startAtLogin.unpackaged': 'Starting at login is only available in the installed app, not when run from source.',
   'startAtLogin.failed': 'Couldn’t change this. Try again, or check the app’s log.',
+  'updates.label': 'Check for a newer version on startup',
+  'updates.hint': 'Sends one request to GitHub when OpenSuperBot starts. Updates are never installed automatically.',
+  'updates.available': 'Version {version} is available.',
+  'updates.download': 'Download from GitHub',
   'settings.about': 'About',
   'settings.about.version': 'Version',
   'settings.about.source': 'Run from source (no version number)',
@@ -465,6 +471,29 @@ export const en = {
   'demo.banner': 'Replies here are scripted: they cost nothing and nothing goes to an AI service.',
   'demo.bannerSome': '{names}: in demo mode, so their replies are scripted, cost nothing and go to no AI service.',
   'demo.connect': 'Connect a real model',
+
+  // 界面分组与增强体验
+  'sidebar.section.teammates': 'Teammates',
+  'sidebar.section.rooms': 'Rooms',
+  'sidebar.toggle': 'Toggle sidebar',
+  'thread.closeComputer': 'Close computer panel',
+  'thread.jumpLatest': 'Jump to latest',
+  'thread.newBelow': 'New messages below',
+  'thread.mentionButton': 'Mention a teammate',
+  'thread.sendHint': 'Enter to send · Shift+Enter for new line',
+  'thread.empty.dmHint': 'Runs on its own computer. Outward actions pause for your approval.',
+  'thread.empty.groupHint': 'Everyone answers for their own area, or type @ to ask someone directly.',
+  'thread.starter.dm1': 'Check Hacker News and summarize the top 3 stories',
+  'thread.starter.dm2': 'Every weekday at 9:00, send me a morning briefing',
+  'thread.starter.group1': 'Where do we stand today? Flag anything blocked.',
+  'thread.starter.group2': 'What is waiting on my approval or input?',
+  'lightbox.preview': 'Preview {name}',
+  'lightbox.openOriginal': 'Open original',
+  'lightbox.close': 'Close preview',
+  'confirm.cancel': 'Cancel',
+  'confirm.delete': 'Delete',
+  'confirm.forget': 'Forget rule',
+  'confirm.remove': 'Remove',
 } as const
 
 export type MessageKey = keyof typeof en

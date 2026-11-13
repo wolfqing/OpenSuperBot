@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installBrowser, type SpawnLike } from '../src/browsers.js'
-import { appBundle, nodeScriptEnv, onShutdown, reportReady, sandboxNode, type ParentPort, type Runtime } from '../src/hosting.js'
+import { appBundle, nodeScriptEnv, onShutdown, outsideAppEnv, reportReady, sandboxNode, type ParentPort, type Runtime } from '../src/hosting.js'
 import { bubblewrapArgs, runSandboxed, sandboxEnv, sandboxSelfCheck, seatbeltProfile } from '../src/sandbox.js'
 
 /** 装成 utilityProcess 的 parentPort：记下网关说的话，能替壳说话 */
@@ -90,6 +90,45 @@ describe('child processes that run a Node script', () => {
     expect(calls[0]).toMatchObject({ file: APP_EXEC, env: { ELECTRON_RUN_AS_NODE: '1', PLAYWRIGHT_BROWSERS_PATH: '/data/browsers' } })
     expect(calls[1]!.file).toBe(source.execPath)
     expect(calls[1]!.env.ELECTRON_RUN_AS_NODE).toBeUndefined()
+  })
+})
+
+describe('programs the gateway opens outside the AppImage', () => {
+  it('leaves the environment alone when not running from an AppImage', () => {
+    const env = { PATH: '/usr/local/bin:/usr/bin', LD_LIBRARY_PATH: '/opt/cuda/lib', HOME: '/home/op' }
+    expect(outsideAppEnv(env)).toEqual(env)
+  })
+
+  it('strips what AppRun put in, keeps what the operator already had, and never leaves an empty LD_LIBRARY_PATH', () => {
+    const mount = '/tmp/.mount_OpenSuAbCd12'
+    const appRun: NodeJS.ProcessEnv = {
+      APPIMAGE: '/home/op/Apps/OpenSuperBot.AppImage',
+      APPDIR: mount,
+      ARGV0: './OpenSuperBot.AppImage',
+      OWD: '/home/op/Downloads',
+      PATH: `${mount}:${mount}/usr/sbin:/usr/local/bin:/usr/bin`,
+      LD_LIBRARY_PATH: `${mount}/usr/lib`,
+      GSETTINGS_SCHEMA_DIR: `${mount}/usr/share/glib-2.0/schemas`,
+      XDG_DATA_DIRS: `${mount}/usr/share/:/usr/share/gnome:/usr/local/share/:/usr/share/`,
+      PYTHONHOME: `${mount}/usr`,
+      HOME: '/home/op',
+      DISPLAY: ':0',
+    }
+    const clean = outsideAppEnv(appRun)
+    expect(clean).toEqual({
+      PATH: '/usr/local/bin:/usr/bin',
+      XDG_DATA_DIRS: '/usr/share/gnome:/usr/local/share/:/usr/share/',
+      HOME: '/home/op',
+      DISPLAY: ':0',
+    })
+    expect('LD_LIBRARY_PATH' in clean).toBe(false)
+    expect('GSETTINGS_SCHEMA_DIR' in clean).toBe(false)
+    expect('APPDIR' in clean).toBe(false)
+    expect('APPIMAGE' in clean).toBe(false)
+
+    // 操作者自己本来就设了 LD_LIBRARY_PATH 的，只去掉挂载点那一段，原有的留着
+    const withOwn = outsideAppEnv({ ...appRun, LD_LIBRARY_PATH: `${mount}/usr/lib:/opt/cuda/lib64` })
+    expect(withOwn.LD_LIBRARY_PATH).toBe('/opt/cuda/lib64')
   })
 })
 

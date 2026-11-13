@@ -4,6 +4,7 @@ import { MAX_FILES, checkFile, declaredType, humanSize, isImageType } from '../a
 import { useT } from '../i18n'
 import { errorText } from '../i18n/describe'
 import type { AttachmentPayload } from '../types'
+import { FileTextIcon, XIcon } from './Icons'
 
 /** 输入框发文件要用到的几件事，由 App 给：没给就没有回形针 */
 export type FilesIO = {
@@ -177,7 +178,7 @@ export function PendingFiles({ items, notes, alert, onRemove, onRetry }: {
             <li key={item.key} className={`pending-file ${item.status}`}>
               {item.preview
                 ? <img className="pending-thumb" src={item.preview} alt="" />
-                : <span className="pending-icon" aria-hidden="true">📄</span>}
+                : <span className="pending-icon" aria-hidden="true"><FileTextIcon size={14} /></span>}
               <span className="pending-name">{item.file.name}</span>
               <span className="pending-meta" role={item.status === 'error' ? 'alert' : 'status'}>
                 {item.status === 'uploading' ? t('files.uploading') : item.status === 'error' ? item.problem : humanSize(item.file.size)}
@@ -192,7 +193,7 @@ export function PendingFiles({ items, notes, alert, onRemove, onRetry }: {
                 title={t('files.remove', { name: item.file.name })}
                 onClick={() => onRemove(item.key)}
               >
-                ×
+                <XIcon size={13} />
               </button>
             </li>
           ))}

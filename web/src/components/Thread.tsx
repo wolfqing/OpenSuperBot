@@ -13,6 +13,9 @@ import { AttachmentChip } from './AttachmentChip'
 import { BotAvatar, conversationSeed } from './BotAvatar'
 import { BotRefChip } from './BotRefChip'
 import { PendingFiles, usePendingFiles, type FilesIO } from './ComposerFiles'
+import { ConfirmDialog } from './ConfirmDialog'
+import { ArrowDownIcon, ArrowUpIcon, AtSignIcon, MonitorIcon, PaperclipIcon, SidebarIcon, StopSquareIcon } from './Icons'
+import { Lightbox, type LightboxImage } from './Lightbox'
 import { LoginChip } from './LoginChip'
 import { Markdown } from './Markdown'
 import { MemoryChip } from './MemoryChip'
@@ -61,7 +64,10 @@ const stillMentioned = (text: string, name: string) =>
 /** 拖进来的是不是文件（拖一段选中的文字、一个链接不算） */
 const carriesFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
 
-export function Thread({ conversation, messages, thinking, onSend, onDecide, onAnswer, roster, onOpenScreen, onStop, headerExtra, banner, files }: {
+export function Thread({
+  conversation, messages, thinking, onSend, onDecide, onAnswer, roster,
+  onOpenScreen, onToggleScreen, panelOpen, onStop, headerExtra, banner, files, onToggleSidebar,
+}: {
   conversation: Conversation
   messages: Message[]
   thinking: boolean
@@ -70,11 +76,13 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
    * 回一个 Promise 的话，它失败了就把字和文件放回输入框，并说明没发出去。
    */
   onSend: (text: string, mentions?: string[], attachments?: string[]) => void | Promise<void>
-  onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void
+  onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void | Promise<void>
   /** 问题卡片上点了选项 */
   onAnswer?: (messageId: number, choices: string[]) => void | Promise<void>
   roster: Record<string, { name: string; emoji: string }>
   onOpenScreen?: () => void
+  onToggleScreen?: () => void
+  panelOpen?: boolean
   onStop?: () => void
   /** 标题栏右侧多放的东西（比如这位同事用哪个 AI） */
   headerExtra?: ReactNode
@@ -82,6 +90,8 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   banner?: ReactNode
   /** 发文件：给了才有回形针、粘贴和拖放 */
   files?: FilesIO
+  /** 窄窗口下展开侧栏抽屉 */
+  onToggleSidebar?: () => void
 }) {
   const t = useT()
   const [draft, setDraft] = useState('')
@@ -89,7 +99,22 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
   const pickerRef = useRef<HTMLInputElement>(null)
   const [dropping, setDropping] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
-  useEffect(() => { setSendError(null); setDropping(false) }, [conversation.id])
+  const [lightbox, setLightbox] = useState<LightboxImage | null>(null)
+  const [confirmFile, setConfirmFile] = useState<AttachmentPayload | null>(null)
+  const [unpinned, setUnpinned] = useState(false)
+  const [hasNewBelow, setHasNewBelow] = useState(false)
+  const prevMsgCount = useRef(messages.length)
+
+  useEffect(() => {
+    setSendError(null)
+    setDropping(false)
+    setLightbox(null)
+    setConfirmFile(null)
+    setUnpinned(false)
+    setHasNewBelow(false)
+    prevMsgCount.current = 0
+  }, [conversation.id])
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLTextAreaElement>(null)
   // 群里打 @ 点名：光标位置决定在补全哪一段；Esc 关掉的那一个 @ 不再弹，换一个 @ 才弹
@@ -129,8 +154,23 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
 
   useEffect(() => {
     const el = scrollRef.current
-    if (el && pinned.current) el.scrollTop = el.scrollHeight
+    if (el && pinned.current) {
+      el.scrollTop = el.scrollHeight
+    } else if (!pinned.current && messages.length > prevMsgCount.current) {
+      setHasNewBelow(true)
+    }
+    prevMsgCount.current = messages.length
   }, [messages, thinking])
+
+  const jumpToBottom = () => {
+    const el = scrollRef.current
+    pinned.current = true
+    setUnpinned(false)
+    setHasNewBelow(false)
+    if (!el) return
+    if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    else el.scrollTop = el.scrollHeight
+  }
 
   // 输入框随内容长高，最多八行左右
   useEffect(() => {
@@ -158,6 +198,8 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
     setDismissedAt(null)
     setSendError(null)
     pinned.current = true
+    setUnpinned(false)
+    setHasNewBelow(false)
     const result = ids.length ? onSend(text, mentions.length ? mentions : undefined, ids)
       : mentions.length ? onSend(text, mentions) : onSend(text)
     // 没发出去：把字、点过的名和文件放回来，说清原因，别让人以为发了
@@ -168,6 +210,20 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
       const reason = err instanceof ApiError ? errorText(t, err) : err instanceof Error ? err.message : String(err)
       setSendError(t('thread.notSent', { reason }))
     })
+  }
+
+  const triggerMention = () => {
+    const box = boxRef.current
+    const pos = box?.selectionStart ?? draft.length
+    const before = draft.slice(0, pos)
+    const after = draft.slice(pos)
+    const prefix = before.length > 0 && !/[\s(（]$/.test(before) ? ' @' : '@'
+    const nextPos = before.length + prefix.length
+    setDismissedAt(null)
+    setDraft(before + prefix + after)
+    setCaret(nextPos)
+    caretAfterPick.current = nextPos
+    box?.focus()
   }
 
   const onDrag = (e: DragEvent<HTMLElement>) => {
@@ -251,7 +307,7 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
     }
     switch (m.kind) {
       case 'report': return <ReportChip payload={m.payload as ReportPayload} />
-      case 'screenshot': return <ScreenshotChip payload={m.payload as ScreenshotPayload} />
+      case 'screenshot': return <ScreenshotChip payload={m.payload as ScreenshotPayload} onPreview={setLightbox} />
       case 'approval_request': return <ApprovalChip payload={m.payload as ApprovalPayload} onDecide={onDecide} />
       case 'memory_updated': return <MemoryChip payload={m.payload as MemoryPayload} />
       case 'routine_created': return <RoutineChip payload={m.payload as RoutinePayload} />
@@ -261,7 +317,13 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
       case 'activity': return <ActivityChip payload={m.payload as ActivityPayload} />
       case 'webhook': return <WebhookChip payload={m.payload as WebhookPayload} />
       case 'attachment':
-        return <AttachmentChip payload={m.payload as AttachmentPayload} {...(files?.remove ? { onRemove: files.remove } : {})} />
+        return (
+          <AttachmentChip
+            payload={m.payload as AttachmentPayload}
+            onPreview={setLightbox}
+            {...(files?.remove ? { onRemove: files.remove, onRequestRemove: setConfirmFile } : {})}
+          />
+        )
       case 'question':
         return <QuestionChip payload={m.payload as QuestionPayload} onAnswer={(choices) => onAnswer?.(m.id, choices)} />
       case 'approval_resolved': {
@@ -288,6 +350,9 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
       : undefined
 
   const now = new Date()
+  const starters = conversation.kind === 'group'
+    ? [t('thread.starter.group1'), t('thread.starter.group2')]
+    : [t('thread.starter.dm1'), t('thread.starter.dm2')]
 
   return (
     <main
@@ -299,13 +364,34 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
     >
       {dropping ? <div className="drop-hint" role="status">{t('thread.dropHere', { name: conversation.title })}</div> : null}
       <header className="thread-header">
+        {onToggleSidebar ? (
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            onClick={onToggleSidebar}
+            aria-label={t('sidebar.toggle')}
+            title={t('sidebar.toggle')}
+          >
+            <SidebarIcon size={15} />
+          </button>
+        ) : null}
         <BotAvatar seed={conversationSeed(conversation)} emoji={conversation.emoji} />
-        <span className="thread-name">{conversation.title}</span>
-        {conversation.subtitle ? <span className="thread-role">{conversation.subtitle}</span> : null}
+        <div className="thread-heading">
+          <span className="thread-name">{conversation.title}</span>
+          {conversation.subtitle ? <span className="thread-role">{conversation.subtitle}</span> : null}
+        </div>
+        <span className="thread-header-spacer" />
         {headerExtra}
-        {conversation.kind === 'dm' && onOpenScreen ? (
-          <button className="screen-button" onClick={onOpenScreen} aria-label={t('thread.openComputer')} title={t('thread.openComputer')}>
-            🖥️
+        {conversation.kind === 'dm' && (onToggleScreen ?? onOpenScreen) ? (
+          <button
+            type="button"
+            className={`screen-button${panelOpen ? ' active' : ''}`}
+            onClick={onToggleScreen ?? onOpenScreen}
+            aria-label={t('thread.openComputer')}
+            aria-pressed={Boolean(panelOpen)}
+            title={panelOpen ? t('thread.closeComputer') : t('thread.openComputer')}
+          >
+            <MonitorIcon size={15} />
           </button>
         ) : null}
       </header>
@@ -315,19 +401,50 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget
-          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+          const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+          pinned.current = nearBottom
+          setUnpinned(!nearBottom)
+          if (nearBottom) setHasNewBelow(false)
         }}
       >
+        {messages.length === 0 && !thinking ? (
+          <div className="thread-welcome">
+            <div className="thread-welcome-avatar">
+              <BotAvatar seed={conversationSeed(conversation)} emoji={conversation.emoji} size="xl" />
+            </div>
+            <div className="thread-welcome-hint">
+              {t(conversation.kind === 'group' ? 'thread.empty.groupHint' : 'thread.empty.dmHint')}
+            </div>
+            <div className="thread-starters">
+              {starters.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="starter-chip"
+                  onClick={() => void onSend(prompt)}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {messages.map((m, i) => {
           const prev = messages[i - 1]
+          const next = messages[i + 1]
           const newDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at)
           const showTime = newDay || m.created_at - prev.created_at > TIME_GAP_MS
           const speaker = speakerOf(m)
+          const sameSpeakerNext = Boolean(
+            next && next.sender === m.sender && m.sender !== 'user' && m.kind !== 'approval_resolved'
+            && next.kind !== 'approval_resolved' && dayKey(next.created_at) === dayKey(m.created_at)
+            && next.created_at - m.created_at <= TIME_GAP_MS,
+          )
           const at = new Date(m.created_at)
           return (
             <Fragment key={m.id}>
               {newDay ? <div className="day-divider" role="separator">{dayLabel(m.created_at, now, t)}</div> : null}
-              <div className={`row ${rowClass(m)}`}>
+              <div className={`row ${rowClass(m)}${sameSpeakerNext ? ' row-grouped' : ''}`}>
                 <div className="row-inner">
                   {speaker || showTime ? (
                     <div className="row-meta">
@@ -352,31 +469,17 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
         })}
         {thinking ? <div className="row from-bot"><div className="bubble typing">•••</div></div> : null}
       </div>
-      <PendingFiles items={pending.items} notes={notes} alert={sendError} onRemove={pending.remove} onRetry={pending.retry} />
+
       <footer className="composer">
-        {files ? (
-          <>
-            <input
-              ref={pickerRef}
-              type="file"
-              multiple
-              hidden
-              accept={ACCEPT}
-              onChange={(e) => {
-                pending.add(Array.from(e.target.files ?? []))
-                e.target.value = '' // 同一个文件拿掉以后还能再选一次
-              }}
-            />
-            <button
-              type="button"
-              className="composer-attach"
-              onClick={() => pickerRef.current?.click()}
-              aria-label={t('thread.attach')}
-              title={t('thread.attachTitle')}
-            >
-              📎
-            </button>
-          </>
+        {unpinned && messages.length > 0 ? (
+          <button
+            type="button"
+            className={`jump-latest${hasNewBelow ? ' unread' : ''}`}
+            onClick={jumpToBottom}
+          >
+            <ArrowDownIcon size={13} />
+            <span>{t(hasNewBelow ? 'thread.newBelow' : 'thread.jumpLatest')}</span>
+          </button>
         ) : null}
         {menuOpen ? (
           <ul className="mention-menu" id={menuId} role="listbox" aria-label={t('thread.mentionList')}>
@@ -398,43 +501,112 @@ export function Thread({ conversation, messages, thinking, onSend, onDecide, onA
             ))}
           </ul>
         ) : null}
-        <textarea
-          ref={boxRef}
-          rows={1}
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value)
-            setCaret(e.target.selectionStart ?? e.target.value.length)
-          }}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onKeyDown={onKeyDown}
-          onPaste={(e) => {
-            // 粘贴的是文件（截图、从访达复制的图）就当附件；粘贴文字照常
-            const pasted = files ? Array.from(e.clipboardData?.files ?? []) : []
-            if (!pasted.length) return
-            e.preventDefault()
-            pending.add(pasted)
-          }}
-          aria-autocomplete={members.length ? 'list' : undefined}
-          aria-controls={menuOpen ? menuId : undefined}
-          aria-activedescendant={menuOpen ? `${menuId}-${current}` : undefined}
-          placeholder={members.length
-            ? t('thread.placeholderGroup', { name: conversation.title })
-            : t('thread.placeholder', { name: conversation.title })}
-        />
-        {thinking && onStop ? (
-          <button className="composer-stop" onClick={onStop} aria-label={t('thread.stop')} title={t('thread.stopTitle')}>■</button>
-        ) : null}
-        <button
-          className="composer-send"
-          onClick={submit}
-          disabled={!canSend}
-          aria-label={t('thread.send')}
-          title={pending.uploading ? t('thread.sendWaiting') : undefined}
-        >
-          ↑
-        </button>
+        <div className="composer-box">
+          <PendingFiles items={pending.items} notes={notes} alert={sendError} onRemove={pending.remove} onRetry={pending.retry} />
+          <textarea
+            ref={boxRef}
+            rows={1}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setCaret(e.target.selectionStart ?? e.target.value.length)
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              // 粘贴的是文件（截图、从访达复制的图）就当附件；粘贴文字照常
+              const pasted = files ? Array.from(e.clipboardData?.files ?? []) : []
+              if (!pasted.length) return
+              e.preventDefault()
+              pending.add(pasted)
+            }}
+            aria-autocomplete={members.length ? 'list' : undefined}
+            aria-controls={menuOpen ? menuId : undefined}
+            aria-activedescendant={menuOpen ? `${menuId}-${current}` : undefined}
+            placeholder={members.length
+              ? t('thread.placeholderGroup', { name: conversation.title })
+              : t('thread.placeholder', { name: conversation.title })}
+          />
+          <div className="composer-toolbar">
+            <div className="composer-tools-left">
+              {files ? (
+                <>
+                  <input
+                    ref={pickerRef}
+                    type="file"
+                    multiple
+                    hidden
+                    accept={ACCEPT}
+                    onChange={(e) => {
+                      pending.add(Array.from(e.target.files ?? []))
+                      e.target.value = '' // 同一个文件拿掉以后还能再选一次
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="composer-attach"
+                    onClick={() => pickerRef.current?.click()}
+                    aria-label={t('thread.attach')}
+                    title={t('thread.attachTitle')}
+                  >
+                    <PaperclipIcon size={15} />
+                  </button>
+                </>
+              ) : null}
+              {members.length > 0 ? (
+                <button
+                  type="button"
+                  className="composer-mention-btn"
+                  onClick={triggerMention}
+                  aria-label={t('thread.mentionButton')}
+                  title={t('thread.mentionButton')}
+                >
+                  <AtSignIcon size={15} />
+                </button>
+              ) : null}
+            </div>
+            <div className="composer-tools-right">
+              <span className="composer-shortcut" title={t('thread.sendHint')} aria-hidden="true">↵</span>
+              {thinking && onStop ? (
+                <button
+                  type="button"
+                  className="composer-stop"
+                  onClick={onStop}
+                  aria-label={t('thread.stop')}
+                  title={t('thread.stopTitle')}
+                >
+                  <StopSquareIcon size={12} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="composer-send"
+                onClick={submit}
+                disabled={!canSend}
+                aria-label={t('thread.send')}
+                title={pending.uploading ? t('thread.sendWaiting') : t('thread.send')}
+              >
+                <ArrowUpIcon size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
       </footer>
+
+      {lightbox ? <Lightbox image={lightbox} onClose={() => setLightbox(null)} /> : null}
+      {confirmFile && files?.remove ? (
+        <ConfirmDialog
+          message={t('file.removeConfirm', { name: confirmFile.name })}
+          confirmLabel={t('confirm.remove')}
+          cancelLabel={t('confirm.cancel')}
+          onConfirm={() => {
+            const id = confirmFile.id
+            setConfirmFile(null)
+            files.remove?.(id)
+          }}
+          onCancel={() => setConfirmFile(null)}
+        />
+      ) : null}
     </main>
   )
 }

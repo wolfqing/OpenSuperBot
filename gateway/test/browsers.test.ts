@@ -50,6 +50,8 @@ describe('findBrowser', () => {
       .toEqual({ executablePath: newest, source: 'downloaded' })
     const linux = join('/data/browsers', 'chromium-1248', 'chrome-linux64/chrome')
     expect(findDownloadedBrowser('/data/browsers', { exists: have(linux), readdir })).toBe(linux)
+    const linuxArm = join('/data/browsers', 'chromium-1248', 'chrome-linux-arm64/chrome')
+    expect(findDownloadedBrowser('/data/browsers', { exists: have(linuxArm), readdir })).toBe(linuxArm)
     const windows = join('/data/browsers', 'chromium-1248', 'chrome-win64/chrome.exe')
     expect(findDownloadedBrowser('/data/browsers', { exists: have(windows), readdir })).toBe(windows)
     expect(findBrowser({ dataDir: '/data', env: {}, platform: 'darwin', exists: () => false, readdir: () => [] })).toBeNull()

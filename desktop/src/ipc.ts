@@ -1,8 +1,9 @@
 import { isGateway } from './security.js'
+import type { AvailableUpdate } from './updates.js'
 
 /**
  * 页面能叫主进程做的事，只有这几样（preload.cts 里一一对应）：
- *   desktop:info            App 版本、平台、Electron 版本
+ *   desktop:info            App 版本、平台、Electron 版本、是否有新版可下
  *   desktop:login-item:get  开机自启开着没有、这台机器支不支持
  *   desktop:login-item:set  开 / 关开机自启
  * 每次调用都验发送方：必须是网关自己的页（同端口、本机地址），而且是顶层页面——
@@ -14,7 +15,7 @@ export const CHANNELS = {
   loginItemSet: 'desktop:login-item:set',
 } as const
 
-export type DesktopInfo = { version: string; platform: string; electron: string }
+export type DesktopInfo = { version: string; platform: string; electron: string; update?: AvailableUpdate | null }
 /**
  * why：supported 为 false 时是 platform（这个系统不支持）或 unpackaged（源码跑的，没打包）；
  * needs_approval = macOS 上登记了，但被用户在「系统设置 → 通用 → 登录项」里关掉了，要去那里打开。

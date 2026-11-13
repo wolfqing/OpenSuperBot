@@ -69,10 +69,11 @@ function BatchItems({ items, kept, onToggle, approved }: {
 
 export function ApprovalChip({ payload, onDecide }: {
   payload: ApprovalPayload
-  onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void
+  onDecide: (approvalId: number, decision: 'approve' | 'discard', remember?: RuleDuration, items?: number[]) => void | Promise<void>
 }) {
   const t = useT()
   const [choosing, setChoosing] = useState(false)
+  const [busy, setBusy] = useState(false)
   const items = payload.items ?? []
   const [kept, setKept] = useState(() => new Set(items.map((_, i) => i)))
   const toggle = (i: number) => setKept((k) => {
@@ -82,12 +83,23 @@ export function ApprovalChip({ payload, onDecide }: {
     return next
   })
   const scope = payload.kind && payload.target ? `${payload.kind} → ${payload.target}` : null
+  const runDecision = (decision: 'approve' | 'discard', remember?: RuleDuration, subset?: number[]) => {
+    const res = remember !== undefined
+      ? onDecide(payload.approvalId, decision, remember)
+      : subset !== undefined
+        ? onDecide(payload.approvalId, decision, undefined, subset)
+        : onDecide(payload.approvalId, decision)
+    if (res && typeof (res as Promise<void>).finally === 'function') {
+      setBusy(true)
+      void (res as Promise<void>).finally(() => setBusy(false))
+    }
+  }
   // 全勾着就不传下标：网关默认整批放行
   const approve = () => {
     if (items.length && kept.size < items.length) {
-      onDecide(payload.approvalId, 'approve', undefined, [...kept].sort((a, b) => a - b))
+      runDecision('approve', undefined, [...kept].sort((a, b) => a - b))
     } else {
-      onDecide(payload.approvalId, 'approve')
+      runDecision('approve')
     }
   }
 
@@ -148,25 +160,25 @@ export function ApprovalChip({ payload, onDecide }: {
           <div className="approval-remember-why">{t('approval.rememberWhy', { scope: scope ?? '' })}</div>
           <div className="approval-buttons">
             {DURATIONS.map((d) => (
-              <button key={d.value} className="remember" onClick={() => onDecide(payload.approvalId, 'approve', d.value)}>
+              <button key={d.value} className="remember" disabled={busy} onClick={() => runDecision('approve', d.value)}>
                 {t(d.label)}
               </button>
             ))}
-            <button className="discard" onClick={() => setChoosing(false)}>{t('approval.cancel')}</button>
+            <button className="discard" disabled={busy} onClick={() => setChoosing(false)}>{t('approval.cancel')}</button>
           </div>
         </div>
       ) : (
         <div className="approval-buttons">
-          <button className="approve" disabled={items.length > 0 && kept.size === 0} onClick={approve}>
+          <button className="approve" disabled={busy || (items.length > 0 && kept.size === 0)} onClick={approve}>
             {!items.length
               ? t('approval.approve')
               : kept.size === items.length
                 ? t('approval.approveAll', { count: items.length })
                 : t('approval.approveSome', { kept: kept.size, count: items.length })}
           </button>
-          <button className="discard" onClick={() => onDecide(payload.approvalId, 'discard')}>{t('approval.discard')}</button>
+          <button className="discard" disabled={busy} onClick={() => runDecision('discard')}>{t('approval.discard')}</button>
           {payload.canRemember ? (
-            <button className="remember-toggle" onClick={() => setChoosing(true)}>{t('approval.alwaysAllow')}</button>
+            <button className="remember-toggle" disabled={busy} onClick={() => setChoosing(true)}>{t('approval.alwaysAllow')}</button>
           ) : null}
         </div>
       )}

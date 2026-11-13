@@ -10,7 +10,7 @@ export type BlockReason =
   | { code: 'wildcard' | 'several' | 'everyone' | 'whole_service' | 'not_one_email' | 'whole_site' | 'vague_post'; target: string }
 
 /** 这台机器为什么没有沙箱 */
-export type SandboxMissing = 'install_bwrap' | 'no_sandbox_exec' | 'unsupported_os'
+export type SandboxMissing = 'install_bwrap' | 'userns_blocked' | 'no_sandbox_exec' | 'unsupported_os'
 
 /** 网关替同事说的固定话（kind 还是 text，content 是英文；有这个 payload 就按语言重说） */
 export type NoticePayload =
