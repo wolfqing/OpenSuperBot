@@ -43,24 +43,27 @@ export const pageLang = (locale: string): PageLang => (locale.toLowerCase().star
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!)
 
 const STYLE = `
-:root { color-scheme: dark light; --bg: #0d0d0d; --card: #1a1a1a; --text: #ededed; --dim: #8f8f8f; --border: #2c2c2c; --red: #e5534b; }
-@media (prefers-color-scheme: light) { :root { --bg: #f6f6f6; --card: #fff; --text: #161616; --dim: #5f5f5f; --border: #ddd; --red: #c93a33; } }
+:root { color-scheme: dark light; --bg: #0b0c0f; --card: #161920; --text: #f0f2f5; --dim: #9aa1ae; --border: rgba(255, 255, 255, 0.11); --red: #ec5b53; }
+@media (prefers-color-scheme: light) { :root { --bg: #f6f7f9; --card: #fff; --text: #14161a; --dim: #5c6270; --border: #dfe2e8; --red: #c93a33; } }
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
-  background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
-.card { width: min(620px, 100%); background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; }
-h1 { font-size: 17px; margin: 0 0 8px; }
+body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 48px 24px 24px;
+  background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC', sans-serif;
+  -webkit-font-smoothing: antialiased; }
+.drag { position: fixed; top: 0; left: 0; right: 0; height: 44px; -webkit-app-region: drag; }
+.card { width: min(620px, 100%); background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 26px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 22px 54px rgba(0, 0, 0, 0.42); }
+h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
 p { margin: 0 0 10px; color: var(--dim); }
 .why { color: var(--red); }
-.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
-a.button, button { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
-  background: transparent; color: var(--text); text-decoration: none; cursor: pointer; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+a.button, button { font: inherit; font-size: 13px; font-weight: 500; padding: 7px 13px; border-radius: 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text); text-decoration: none; cursor: pointer; -webkit-app-region: no-drag; }
 a.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-textarea { width: 100%; height: 220px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
-  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; resize: vertical; }
-label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+textarea { width: 100%; height: 220px; font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; resize: vertical; -webkit-app-region: no-drag; }
+label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 5px; }
 .spin { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%;
-  animation: s 0.9s linear infinite; margin-bottom: 12px; }
+  animation: s 0.9s linear infinite; margin-bottom: 14px; }
 @keyframes s { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 `
@@ -68,7 +71,7 @@ label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; 
 function page(lang: PageLang, title: string, body: string, script = ''): string {
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">`
     + `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">`
-    + `<title>${esc(title)}</title><style>${STYLE}</style></head><body><main class="card">${body}</main>${script}</body></html>`
+    + `<title>${esc(title)}</title><style>${STYLE}</style></head><body><div class="drag" aria-hidden="true"></div><main class="card">${body}</main>${script}</body></html>`
 }
 
 export function startingPage(lang: PageLang): string {

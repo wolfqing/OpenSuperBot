@@ -245,7 +245,6 @@ describe('sending files from the composer', () => {
 
   it('shows a sent file in the thread and removes it when asked', async () => {
     const remove = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const sent: Message = {
       id: 4, thread_id: dm.id, sender: 'user', kind: 'attachment', content: '', created_at: 4,
       payload: { id: 'a'.repeat(32), url: `/api/uploads/${'a'.repeat(32)}`, name: 'notes.md', mime: 'text/markdown', size: 6 },
@@ -253,6 +252,11 @@ describe('sending files from the composer', () => {
     setup({ files: { ...io().files, remove }, messages: [sent] })
     expect(screen.getByRole('link', { name: 'Download notes.md' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Remove notes.md' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('notes.md')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(remove).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove notes.md' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
     expect(remove).toHaveBeenCalledWith('a'.repeat(32))
   })
 

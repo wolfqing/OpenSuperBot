@@ -465,6 +465,29 @@ export const en = {
   'demo.banner': 'Replies here are scripted: they cost nothing and nothing goes to an AI service.',
   'demo.bannerSome': '{names}: in demo mode, so their replies are scripted, cost nothing and go to no AI service.',
   'demo.connect': 'Connect a real model',
+
+  // 界面分组与增强体验
+  'sidebar.section.teammates': 'Teammates',
+  'sidebar.section.rooms': 'Rooms',
+  'sidebar.toggle': 'Toggle sidebar',
+  'thread.closeComputer': 'Close computer panel',
+  'thread.jumpLatest': 'Jump to latest',
+  'thread.newBelow': 'New messages below',
+  'thread.mentionButton': 'Mention a teammate',
+  'thread.sendHint': 'Enter to send · Shift+Enter for new line',
+  'thread.empty.dmHint': 'Runs on its own computer. Outward actions pause for your approval.',
+  'thread.empty.groupHint': 'Everyone answers for their own area, or type @ to ask someone directly.',
+  'thread.starter.dm1': 'Check Hacker News and summarize the top 3 stories',
+  'thread.starter.dm2': 'Every weekday at 9:00, send me a morning briefing',
+  'thread.starter.group1': 'Where do we stand today? Flag anything blocked.',
+  'thread.starter.group2': 'What is waiting on my approval or input?',
+  'lightbox.preview': 'Preview {name}',
+  'lightbox.openOriginal': 'Open original',
+  'lightbox.close': 'Close preview',
+  'confirm.cancel': 'Cancel',
+  'confirm.delete': 'Delete',
+  'confirm.forget': 'Forget rule',
+  'confirm.remove': 'Remove',
 } as const
 
 export type MessageKey = keyof typeof en

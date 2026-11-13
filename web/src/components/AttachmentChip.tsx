@@ -1,6 +1,8 @@
 import { humanSize, isImageType } from '../attachments'
 import { useT, type T } from '../i18n'
 import type { AttachmentPayload } from '../types'
+import { FileTextIcon, XIcon } from './Icons'
+import type { LightboxImage } from './Lightbox'
 
 const KIND: Record<string, string> = {
   'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP', 'image/gif': 'GIF',
@@ -20,7 +22,12 @@ function describe(file: AttachmentPayload, t: T): string {
  * 你发给同事的一个文件。图片是缩略图，点开看原图；别的是一条，点了下载。
  * 移除只删网关上的那份（线程里留个名字），所以先问一句——同事电脑上的副本不会跟着没。
  */
-export function AttachmentChip({ payload, onRemove }: { payload: AttachmentPayload; onRemove?: (id: string) => void }) {
+export function AttachmentChip({ payload, onRemove, onRequestRemove, onPreview }: {
+  payload: AttachmentPayload
+  onRemove?: (id: string) => void
+  onRequestRemove?: (payload: AttachmentPayload) => void
+  onPreview?: (image: LightboxImage) => void
+}) {
   const t = useT()
   const { name } = payload
   if (payload.deleted) {
@@ -37,15 +44,29 @@ export function AttachmentChip({ payload, onRemove }: { payload: AttachmentPaylo
       className="file-remove"
       aria-label={t('file.remove', { name })}
       title={t('file.remove', { name })}
-      onClick={() => { if (window.confirm(t('file.removeConfirm', { name }))) onRemove(payload.id) }}
+      onClick={() => {
+        if (onRequestRemove) onRequestRemove(payload)
+        else if (window.confirm(t('file.removeConfirm', { name }))) onRemove(payload.id)
+      }}
     >
-      ×
+      <XIcon size={13} />
     </button>
   ) : null
   if (isImageType(payload.mime)) {
     return (
       <figure className="file-figure">
-        <a href={payload.url} target="_blank" rel="noreferrer" aria-label={t('file.open', { name })}>
+        <a
+          href={payload.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t('file.open', { name })}
+          onClick={(e) => {
+            if (onPreview && !e.metaKey && !e.ctrlKey && e.button === 0) {
+              e.preventDefault()
+              onPreview({ url: payload.url, alt: name, caption: name })
+            }
+          }}
+        >
           <img className="file-img" src={payload.url} width={payload.width} height={payload.height} alt={name} loading="lazy" />
         </a>
         <figcaption className="file-caption">
@@ -59,7 +80,7 @@ export function AttachmentChip({ payload, onRemove }: { payload: AttachmentPaylo
   return (
     <div className="file-chip">
       <a className="file-link" href={payload.url} download={name} aria-label={t('file.download', { name })}>
-        <span className="file-icon" aria-hidden="true">📄</span>
+        <span className="file-icon" aria-hidden="true"><FileTextIcon size={15} /></span>
         <span className="file-name">{name}</span>
       </a>
       <span className="file-meta">{describe(payload, t)}</span>

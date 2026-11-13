@@ -104,7 +104,7 @@ export function conversationSeed(c: { id: string; kind: 'dm' | 'group'; members:
 type Props = {
   seed: string
   emoji?: string
-  size?: 'xs' | 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   state?: string
   title?: string
 }

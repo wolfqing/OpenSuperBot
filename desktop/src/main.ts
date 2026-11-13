@@ -259,7 +259,8 @@ function run() {
 
   function createWindow() {
     win = new BrowserWindow({
-      width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0d0d0d',
+      width: 1200, height: 800, minWidth: 720, minHeight: 480, title: 'OpenSuperBot', backgroundColor: '#0b0c0f',
+      ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 16 } } : {}),
       // 只有主窗口带 preload（window.opensuperbot）；App 里另开的窗口（屏幕、附件）不需要
       webPreferences: { ...SAFE_WEB_PREFERENCES, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) },
     })
@@ -301,7 +302,7 @@ function run() {
 
   /** 网关自己的页（屏幕、附件）：App 里开一个窗口，同样的安全设置、同一个登录 */
   function openInApp(url: string) {
-    const child = new BrowserWindow({ width: 1000, height: 760, title: 'OpenSuperBot', backgroundColor: '#0d0d0d', webPreferences: { ...SAFE_WEB_PREFERENCES } })
+    const child = new BrowserWindow({ width: 1000, height: 760, title: 'OpenSuperBot', backgroundColor: '#0b0c0f', webPreferences: { ...SAFE_WEB_PREFERENCES } })
     void child.loadURL(url)
   }
 

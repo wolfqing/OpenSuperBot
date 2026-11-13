@@ -5,6 +5,7 @@ import { ApiError } from '../api'
 import type { ActionEntry, ComputerInfo, ComputerRoutine, RoutineAction } from '../types'
 import { untilLabel } from './ApprovalChip'
 import { CdpScreen } from './CdpScreen'
+import { PauseIcon, PlayIcon, RotateCwIcon, XIcon } from './Icons'
 
 const formatCount = (n: number, t: T) => n.toLocaleString(t.locale ?? 'en-US')
 
@@ -104,7 +105,7 @@ function RecentActions({ actions }: { actions: ActionEntry[] }) {
   const t = useT()
   const trigger = (name: string) => { const key = TRIGGER[name]; return key ? t(key) : name }
   return (
-    <div className="panel-section">
+    <div className={`panel-section${actions.length === 0 ? ' panel-section-compact' : ''}`}>
       <div className="panel-section-title">{t('panel.recent')}</div>
       {actions.length === 0 ? (
         <div className="panel-empty">{t('panel.recentEmpty')}</div>
@@ -136,7 +137,9 @@ export function ComputerPanel({ info, botName, onClose, ...actions }: {
     <aside className="computer-panel">
       <header className="panel-header">
         <span className="panel-title">{t('panel.title', { name: botName })}</span>
-        <button className="panel-close" onClick={onClose} aria-label={t('panel.close')}>✕</button>
+        <button type="button" className="panel-close" onClick={onClose} aria-label={t('panel.close')} title={t('panel.close')}>
+          <XIcon size={15} />
+        </button>
       </header>
 
       {!info ? <Waking botName={botName} /> : <PanelBody info={info} botName={botName} {...actions} />}
@@ -220,7 +223,7 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
       ) : null}
       {problem ? <div className="panel-problem" role="alert">{problem}</div> : null}
 
-      <div className="panel-section">
+      <div className={`panel-section${info.routines.length === 0 ? ' panel-section-compact' : ''}`}>
         <div className="panel-section-title">{t('panel.routines')}</div>
         {info.routines.length === 0 ? (
           <div className="panel-empty">{t('panel.noRoutines')}</div>
@@ -240,15 +243,20 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
                 </div>
                 {onRoutine ? (
                   <div className="panel-routine-actions">
-                    <button onClick={() => onRoutine(r.id, 'run')} aria-label={t('panel.runNowAria', { name: r.name })} title={t('panel.runNow')}>▶</button>
+                    <button type="button" onClick={() => onRoutine(r.id, 'run')} aria-label={t('panel.runNowAria', { name: r.name })} title={t('panel.runNow')}>
+                      <PlayIcon size={11} />
+                    </button>
                     <button
+                      type="button"
                       onClick={() => onRoutine(r.id, paused ? 'resume' : 'pause')}
                       aria-label={t(paused ? 'panel.resumeAria' : 'panel.pauseAria', { name: r.name })}
                       title={t(paused ? 'panel.resume' : 'panel.pause')}
                     >
-                      {paused ? '↻' : '❚❚'}
+                      {paused ? <RotateCwIcon size={12} /> : <PauseIcon size={11} />}
                     </button>
-                    <button onClick={() => onRoutine(r.id, 'delete')} aria-label={t('panel.deleteAria', { name: r.name })} title={t('panel.delete')}>✕</button>
+                    <button type="button" onClick={() => onRoutine(r.id, 'delete')} aria-label={t('panel.deleteAria', { name: r.name })} title={t('panel.delete')}>
+                      <XIcon size={12} />
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -257,7 +265,7 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
         )}
       </div>
 
-      <div className="panel-section">
+      <div className={`panel-section${rules.length === 0 ? ' panel-section-compact' : ''}`}>
         <div className="panel-section-title">{t('panel.allowed')}</div>
         {rules.length === 0 ? (
           <div className="panel-empty">{t('panel.allowedEmpty')}</div>
@@ -275,11 +283,12 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
               {onRevokeRule ? (
                 <div className="panel-routine-actions">
                   <button
+                    type="button"
                     onClick={() => onRevokeRule(rule.id)}
                     aria-label={t('panel.revokeAria', { kind: rule.kind, target: rule.target })}
                     title={t('panel.revokeTitle')}
                   >
-                    ✕
+                    <XIcon size={12} />
                   </button>
                 </div>
               ) : null}
@@ -288,7 +297,7 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
         )}
       </div>
 
-      <div className="panel-section">
+      <div className={`panel-section${memory.length === 0 ? ' panel-section-compact' : ''}`}>
         <div className="panel-section-title">{t('panel.standing')}</div>
         {memory.length === 0 ? (
           <div className="panel-empty">{t('panel.standingEmpty')}</div>
@@ -298,7 +307,9 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
               <span className="panel-memory-rule">{rule}</span>
               {onForgetRule ? (
                 <div className="panel-routine-actions">
-                  <button onClick={() => onForgetRule(rule)} aria-label={t('panel.forgetAria', { rule })} title={t('panel.forgetTitle')}>✕</button>
+                  <button type="button" onClick={() => onForgetRule(rule)} aria-label={t('panel.forgetAria', { rule })} title={t('panel.forgetTitle')}>
+                    <XIcon size={12} />
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -322,15 +333,25 @@ function PanelBody({ info, botName, onRoutine, onRevokeRule, onForgetRule, onWin
 
       {info.actions ? <RecentActions actions={info.actions} /> : null}
 
-      {info.usage ? (
-        <div className="panel-section">
-          <div className="panel-section-title">{t('panel.usage')}</div>
-          <div className="panel-usage">
-            {t('panel.tokens', { count: formatCount(info.usage.today.total, t) })}
-            {info.usage.budget ? t('panel.ofBudget', { budget: formatCount(info.usage.budget, t) }) : ''}
+      {info.usage ? (() => {
+        const budget = info.usage.budget ?? 0
+        const pct = budget > 0 ? Math.min(100, Math.round((info.usage.today.total / budget) * 100)) : 0
+        const tone = pct >= 100 ? ' over' : pct >= 80 ? ' warn' : ''
+        return (
+          <div className="panel-section">
+            <div className="panel-section-title">{t('panel.usage')}</div>
+            <div className="panel-usage">
+              {t('panel.tokens', { count: formatCount(info.usage.today.total, t) })}
+              {info.usage.budget ? t('panel.ofBudget', { budget: formatCount(info.usage.budget, t) }) : ''}
+            </div>
+            {budget > 0 ? (
+              <div className="panel-usage-bar" aria-hidden="true">
+                <div className={`panel-usage-fill${tone}`} style={{ width: `${pct}%` }} />
+              </div>
+            ) : null}
           </div>
-        </div>
-      ) : null}
+        )
+      })() : null}
     </>
   )
 }

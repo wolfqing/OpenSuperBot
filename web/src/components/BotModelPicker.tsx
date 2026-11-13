@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { FieldErrors, fetchConnectionModels, setBotLlm } from '../api'
 import { useT } from '../i18n'
 import type { BotLlm, ConnectionsState, ProviderPreset } from '../types'
+import { useEscape } from './ConfirmDialog'
+import { XIcon } from './Icons'
 import { connectionLabel, fieldText } from './ModelsDialog'
 
 /** 这位同事此刻实际用的模型：自己选的，否则它那个连接的默认模型（连接不在了就退回默认连接）。'stub' = 演示模式 */
@@ -48,6 +50,7 @@ export function BotModelPicker({ botId, botName, state, providers, onSaved, onMa
   onClose: () => void
 }) {
   const t = useT()
+  useEscape(onClose)
   const current = state.bots[botId] ?? { connectionId: 'main', model: null }
   const [connectionId, setConnectionId] = useState(current.connectionId)
   const [model, setModel] = useState(current.model ?? '')
@@ -87,7 +90,12 @@ export function BotModelPicker({ botId, botName, state, providers, onSaved, onMa
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); void save() }}
       >
-        <div className="modal-title">{t('picker.title', { name: botName })}</div>
+        <div className="modal-head">
+          <div className="modal-title">{t('picker.title', { name: botName })}</div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t('models.close')} title={t('models.close')}>
+            <XIcon size={15} />
+          </button>
+        </div>
         <label>
           <span className="conn-label">{t('picker.connection')}</span>
           <select value={connectionId} onChange={(e) => { setConnectionId(e.target.value); setModel('') }}>

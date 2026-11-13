@@ -6,6 +6,8 @@ import type { AboutInfo, BrowserStatus, ConnectionsState, FieldError, ProviderPr
 import { connectionLabel, fieldText } from './ModelsDialog'
 import { BrowserLine, type LanguageSetting } from './SetupWizard'
 import { StartAtLogin } from './StartAtLogin'
+import { useEscape } from './ConfirmDialog'
+import { XIcon } from './Icons'
 
 type Computers = SettingsView['values']['computers']
 const COMPUTERS: Computers[] = ['auto', 'local', 'docker']
@@ -40,6 +42,7 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
   onClose: () => void
 }) {
   const t = useT()
+  useEscape(onClose)
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [setup, setSetup] = useState<SetupInfo | null>(null)
   const [about, setAbout] = useState<AboutInfo | null>(null)
@@ -119,7 +122,9 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
       <div className="modal modal-wide settings" role="dialog" aria-label={t('settings.title')} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">{t('settings.title')}</div>
-          <button className="modal-close" onClick={onClose} aria-label={t('settings.close')}>×</button>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t('settings.close')} title={t('settings.close')}>
+            <XIcon size={15} />
+          </button>
         </div>
         {loadError ? <div className="form-error" role="alert">{t('settings.loadFailed')}</div> : null}
         {!settings && !loadError ? <p className="settings-dim">{t('settings.loading')}</p> : null}

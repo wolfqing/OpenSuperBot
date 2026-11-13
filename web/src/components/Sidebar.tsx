@@ -5,6 +5,8 @@ import type {
 import { useT, type MessageKey, type T } from '../i18n'
 import { isNotice, noticeText } from '../i18n/describe'
 import { BotAvatar, conversationSeed } from './BotAvatar'
+import { useEscape } from './ConfirmDialog'
+import { CpuSparkleIcon, PlusIcon, SettingsIcon } from './Icons'
 
 /**
  * 单聊就是那位同事的状态。群只说「有人在干活」：等你、卡住、刚干完说的是某一位同事，
@@ -17,6 +19,16 @@ export function conversationState(c: Conversation, statuses: Record<string, BotS
 
 const STATE_TEXT: Partial<Record<BotStatus, MessageKey>> = {
   thinking: 'sidebar.state.thinking', waiting: 'sidebar.state.waiting', blocked: 'sidebar.state.blocked', done: 'sidebar.state.done',
+}
+
+function sidebarTime(ts: number | undefined, locale: string | undefined, now = new Date()): string | null {
+  // 测试里的假时间戳（1、3、9…）不是真实钟点，不标时间
+  if (!ts || ts < 86_400_000) return null
+  const at = new Date(ts)
+  if (at.toDateString() === now.toDateString()) {
+    return at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  }
+  return at.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }
 
 function preview(c: Conversation, t: T): string {
@@ -75,7 +87,7 @@ function preview(c: Conversation, t: T): string {
   }
 }
 
-export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBot, onModels, onSettings }: {
+export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBot, onModels, onSettings, open, onClose }: {
   conversations: Conversation[]
   selectedId: string | null
   statuses: Record<string, BotStatus>
@@ -85,47 +97,115 @@ export function Sidebar({ conversations, selectedId, statuses, onSelect, onNewBo
   onModels?: () => void
   /** 打开设置页；老网关没有设置路由就不传 */
   onSettings?: () => void
+  /** 窄窗口下侧栏抽屉是否展开 */
+  open?: boolean
+  onClose?: () => void
 }) {
   const t = useT()
+  useEscape(open ? onClose : undefined)
   const stateText = (state: BotStatus) => { const key = STATE_TEXT[state]; return key ? t(key) : undefined }
-  return (
-    <aside className="sidebar">
-      <div className="sidebar-title">
-        <span>OpenSuperBot</span>
-        {onModels ? (
-          <button className="sidebar-new sidebar-models" onClick={onModels} aria-label={t('sidebar.models')} title={t('sidebar.models')}>AI</button>
-        ) : null}
-        {onSettings ? (
-          <button className="sidebar-new" onClick={onSettings} aria-label={t('sidebar.settings')} title={t('sidebar.settings')}>⚙</button>
-        ) : null}
-        <button className="sidebar-new" onClick={onNewBot} aria-label={t('sidebar.hire')} title={t('sidebar.hire')}>+</button>
-      </div>
-      {conversations.map((c) => {
-        const state = conversationState(c, statuses)
-        // 有角标（待批、待答）就已经在说「等你」了；没有角标的等待（比如请你登录）才单独标一句
-        const note = state === 'blocked' || state === 'done' || (state === 'waiting' && c.pending === 0)
-          ? stateText(state)
-          : undefined
-        return (
-          <button
-            key={c.id}
-            className={`sidebar-item${c.id === selectedId ? ' selected' : ''}`}
-            onClick={() => onSelect(c.id)}
-          >
-            <BotAvatar seed={conversationSeed(c)} emoji={c.emoji} size="lg" state={state} title={stateText(state)} />
-            <span className="sidebar-text">
-              <span className="sidebar-name">
-                {c.title}{state === 'thinking' ? ' …' : ''}
-                {note ? <span className={`sidebar-state ${state}`}>{note}</span> : null}
-              </span>
-              <span className="sidebar-preview">{preview(c, t)}</span>
+  const now = new Date()
+  const dms = conversations.filter((c) => c.kind === 'dm')
+  const groups = conversations.filter((c) => c.kind === 'group')
+
+  const renderRow = (c: Conversation) => {
+    const state = conversationState(c, statuses)
+    // 有角标（待批、待答）就已经在说「等你」了；没有角标的等待（比如请你登录）才单独标一句
+    const note = state === 'blocked' || state === 'done' || (state === 'waiting' && c.pending === 0)
+      ? stateText(state)
+      : undefined
+    const stamp = sidebarTime(c.last_message?.created_at, t.locale, now)
+    return (
+      <button
+        key={c.id}
+        type="button"
+        className={`sidebar-item${c.id === selectedId ? ' selected' : ''}`}
+        onClick={() => { onSelect(c.id); onClose?.() }}
+      >
+        <BotAvatar seed={conversationSeed(c)} emoji={c.emoji} size="lg" state={state} title={stateText(state)} />
+        <span className="sidebar-text">
+          <span className="sidebar-head">
+            <span className="sidebar-name">
+              <span className="sidebar-name-label">{c.title}{state === 'thinking' ? ' …' : ''}</span>
+              {note ? <span className={`sidebar-state ${state}`}>{note}</span> : null}
             </span>
-            {c.pending > 0 ? (
-              <span className="sidebar-badge" aria-label={t('sidebar.waitingOnYou', { count: c.pending })}>{c.pending}</span>
+            {c.pending === 0 && stamp ? <span className="sidebar-time">{stamp}</span> : null}
+          </span>
+          <span className="sidebar-preview">{preview(c, t)}</span>
+        </span>
+        {c.pending > 0 ? (
+          <span className="sidebar-badge" aria-label={t('sidebar.waitingOnYou', { count: c.pending })}>{c.pending}</span>
+        ) : null}
+      </button>
+    )
+  }
+
+  return (
+    <>
+      {open ? <div className="sidebar-scrim" onClick={onClose} aria-hidden="true" /> : null}
+      <aside className={`sidebar${open ? ' open' : ''}`}>
+        <div className="sidebar-title">
+          <span className="sidebar-brand">
+            <span className="sidebar-brand-mark" aria-hidden="true" />
+            <span>OpenSuperBot</span>
+          </span>
+        </div>
+
+        <div className="sidebar-list">
+          <div className="sidebar-section">
+            <div className="sidebar-section-head">
+              <span className="sidebar-section-label">{t('sidebar.section.teammates')}</span>
+              <button
+                type="button"
+                className="sidebar-new"
+                onClick={() => { onClose?.(); onNewBot() }}
+                aria-label={t('sidebar.hire')}
+                title={t('sidebar.hire')}
+              >
+                <PlusIcon size={13} />
+              </button>
+            </div>
+            {dms.map(renderRow)}
+          </div>
+
+          {groups.length > 0 ? (
+            <div className="sidebar-section">
+              <div className="sidebar-section-head">
+                <span className="sidebar-section-label">{t('sidebar.section.rooms')}</span>
+              </div>
+              {groups.map(renderRow)}
+            </div>
+          ) : null}
+        </div>
+
+        {onModels || onSettings ? (
+          <div className="sidebar-footer">
+            {onModels ? (
+              <button
+                type="button"
+                className="sidebar-foot-btn sidebar-models"
+                onClick={() => { onClose?.(); onModels() }}
+                aria-label={t('sidebar.models')}
+                title={t('sidebar.models')}
+              >
+                <CpuSparkleIcon size={14} />
+                <span>{t('sidebar.models')}</span>
+              </button>
+            ) : <span className="spacer" />}
+            {onSettings ? (
+              <button
+                type="button"
+                className="sidebar-foot-icon"
+                onClick={() => { onClose?.(); onSettings() }}
+                aria-label={t('sidebar.settings')}
+                title={t('sidebar.settings')}
+              >
+                <SettingsIcon size={15} />
+              </button>
             ) : null}
-          </button>
-        )
-      })}
-    </aside>
+          </div>
+        ) : null}
+      </aside>
+    </>
   )
 }

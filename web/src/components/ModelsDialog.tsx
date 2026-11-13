@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { FieldErrors, createConnection, deleteConnection, testConnection, updateConnection, type ConnectionFields } from '../api'
 import { useT, type MessageKey, type T } from '../i18n'
 import type { CheckResult, ConnectionsState, FieldError, LlmApi, ModelConnection, ProviderPreset } from '../types'
+import { ConfirmDialog, useEscape } from './ConfirmDialog'
+import { PlusIcon, XIcon } from './Icons'
 
 type Roster = Record<string, { name: string; emoji: string }>
 
@@ -58,6 +60,8 @@ export function ModelsDialog({ state, providers, roster, onChange, onClose }: {
   const [editing, setEditing] = useState<{ id: string } | 'new' | null>(null)
   const [checks, setChecks] = useState<Record<string, CheckResult | 'testing'>>({})
   const [error, setError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<ModelConnection | null>(null)
+  useEscape(editing ? () => setEditing(null) : onClose)
 
   const users = useMemo(() => {
     const out: Record<string, string[]> = {}
@@ -78,8 +82,7 @@ export function ModelsDialog({ state, providers, roster, onChange, onClose }: {
     }
   }
 
-  const remove = async (c: ModelConnection) => {
-    if (!window.confirm(t('models.confirmDelete', { name: connectionLabel(c, providers, t) }))) return
+  const doRemove = async (c: ModelConnection) => {
     try {
       onChange(await deleteConnection(c.id))
     } catch (err) {
@@ -94,7 +97,9 @@ export function ModelsDialog({ state, providers, roster, onChange, onClose }: {
       <div className="modal modal-wide" role="dialog" aria-label={t('models.title')} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">{t('models.title')}</div>
-          <button className="modal-close" onClick={onClose} aria-label={t('models.close')}>×</button>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t('models.close')} title={t('models.close')}>
+            <XIcon size={15} />
+          </button>
         </div>
         {editing ? (
           <ConnectionForm
@@ -129,19 +134,35 @@ export function ModelsDialog({ state, providers, roster, onChange, onClose }: {
                     </div>
                     <CheckLine result={checks[c.id]} model={c.model} />
                     <div className="conn-actions">
-                      <button onClick={() => void test(c)} disabled={checks[c.id] === 'testing'}>{t('models.test')}</button>
-                      <button onClick={() => setEditing({ id: c.id })}>{t('models.edit')}</button>
-                      {c.builtIn ? null : <button className="danger" onClick={() => void remove(c)}>{t('models.delete')}</button>}
+                      <button type="button" onClick={() => void test(c)} disabled={checks[c.id] === 'testing'}>{t('models.test')}</button>
+                      <button type="button" onClick={() => setEditing({ id: c.id })}>{t('models.edit')}</button>
+                      {c.builtIn ? null : <button type="button" className="danger" onClick={() => setConfirmDelete(c)}>{t('models.delete')}</button>}
                     </div>
                   </div>
                 )
               })}
             </div>
             {error ? <div className="form-error" role="alert">{error}</div> : null}
-            <button className="conn-add" onClick={() => setEditing('new')}>+ {t('models.add')}</button>
+            <button type="button" className="conn-add" onClick={() => setEditing('new')}>
+              <PlusIcon size={13} />
+              <span>{t('models.add')}</span>
+            </button>
           </>
         )}
       </div>
+      {confirmDelete ? (
+        <ConfirmDialog
+          message={t('models.confirmDelete', { name: connectionLabel(confirmDelete, providers, t) })}
+          confirmLabel={t('confirm.delete')}
+          cancelLabel={t('confirm.cancel')}
+          onConfirm={() => {
+            const target = confirmDelete
+            setConfirmDelete(null)
+            void doRemove(target)
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      ) : null}
     </div>
   )
 }
