@@ -18,7 +18,9 @@
     "test": "vitest run",
     "package": "electron-builder --config electron-builder.config.cjs",
     "package:mac": "electron-builder --config electron-builder.config.cjs --mac",
-    "package:linux": "electron-builder --config electron-builder.config.cjs --linux"
+    "package:linux": "electron-builder --config electron-builder.config.cjs --linux",
+    "package:linux:x64": "electron-builder --config electron-builder.config.cjs --linux AppImage deb --x64",
+    "package:linux:arm64": "electron-builder --config electron-builder.config.cjs --linux AppImage deb --arm64"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
