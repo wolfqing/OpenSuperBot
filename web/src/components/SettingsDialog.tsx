@@ -226,7 +226,28 @@ export function SettingsDialog({ llms, providers, browser, language, onLanguage,
 
             {desktop ? (
               <Section title={t('settings.app')}>
+                {desktop.update ? (
+                  <div className="settings-update" role="status">
+                    <span>{t('updates.available', { version: desktop.update.version })}</span>
+                    <a className="setup-link" href={desktop.update.url} target="_blank" rel="noreferrer">
+                      {t('updates.download')}
+                    </a>
+                  </div>
+                ) : null}
                 <StartAtLogin where="settings" />
+                <div className="start-at-login">
+                  <label className="conn-check-row">
+                    <input
+                      type="checkbox"
+                      checked={settings.values.checkUpdates}
+                      disabled={saving}
+                      onChange={(e) => void save({ checkUpdates: e.target.checked })}
+                    />
+                    {t('updates.label')}
+                  </label>
+                  <p className="setup-hint">{t('updates.hint')}</p>
+                </div>
+                {errorFor('checkUpdates')}
               </Section>
             ) : null}
 

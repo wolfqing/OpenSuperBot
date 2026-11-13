@@ -202,11 +202,39 @@ describe('SettingsDialog', () => {
   it('in the app run from source, says start at login needs the installed app', async () => {
     gateway(view())
     vi.stubGlobal('opensuperbot', {
-      info: vi.fn(async () => ({ version: '0.6.0-dev', platform: 'darwin', electron: '44.9.3' })),
+      info: vi.fn(async () => ({ version: '0.6.0-dev', platform: 'darwin', electron: '44.9.3', update: null })),
       loginItem: { get: vi.fn(async () => ({ supported: false, enabled: false, why: 'unpackaged' })), set: vi.fn() },
     })
     show({ lang: 'zh-CN' })
     expect(await screen.findByText('开机自启只在安装版里有，源码跑的不行。')).toBeInTheDocument()
-    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByLabelText('登录电脑时自动打开 OpenSuperBot')).toBeNull()
+    expect(screen.getByLabelText('启动时检查有没有新版本')).toBeChecked()
+  })
+
+  it('in the app, toggles startup update checks and shows a download link when a newer version exists', async () => {
+    const calls = gateway(view(), {
+      'PUT /api/settings': (b) => ({ body: view({ checkUpdates: Boolean(b.checkUpdates) }, { checkUpdates: 'saved' }) }),
+    })
+    vi.stubGlobal('opensuperbot', {
+      info: vi.fn(async () => ({
+        version: '0.6.0',
+        platform: 'darwin',
+        electron: '44.9.3',
+        update: { version: '0.7.0', url: 'https://github.com/wolfqing/OpenSuperBot/releases/tag/v0.7.0' },
+      })),
+      loginItem: { get: vi.fn(async () => ({ supported: true, enabled: false })), set: vi.fn() },
+    })
+    const user = userEvent.setup()
+    show()
+    expect(await screen.findByText('Version 0.7.0 is available.')).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: 'Download from GitHub' })
+    expect(link).toHaveAttribute('href', 'https://github.com/wolfqing/OpenSuperBot/releases/tag/v0.7.0')
+    expect(link).toHaveAttribute('target', '_blank')
+
+    const check = screen.getByLabelText('Check for a newer version on startup')
+    expect(check).toBeChecked()
+    await user.click(check)
+    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PUT', path: '/api/settings', body: { checkUpdates: false } }))
+    expect(check).not.toBeChecked()
   })
 })

@@ -1296,6 +1296,11 @@ button.question-option:hover { background: var(--bg-hover); border-color: var(--
 .settings-dim { color: var(--text-faint); font-size: 12px; }
 .settings-locked { margin: 0; color: var(--amber); font-size: 12px; }
 .settings-restart { margin: 0; color: var(--amber); font-size: 12px; }
+.settings-update {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid rgba(91, 155, 255, 0.35); border-radius: var(--r-md);
+  background: rgba(91, 155, 255, 0.08); font-size: 13px; color: var(--text);
+}
 .settings-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .settings-buttons .spacer { flex: 1; }
 .settings-buttons button {

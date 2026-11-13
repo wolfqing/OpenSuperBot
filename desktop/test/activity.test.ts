@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchSummary, notificationFor, quitQuestion, trayStatus, watchGateway, type GatewayMessageEvent, type SocketFactory } from '../src/activity.js'
+import { fetchSummary, notificationFor, quitQuestion, texts, trayStatus, watchGateway, type GatewayMessageEvent, type SocketFactory } from '../src/activity.js'
 
 const msg = (kind: string, payload: unknown, over: Partial<GatewayMessageEvent['message']> = {}): GatewayMessageEvent => ({
   type: 'message', threadId: 'dm:researcher', message: { id: 7, sender: 'researcher', kind, content: 'x', payload, ...over },
@@ -13,6 +13,8 @@ describe('the tray', () => {
     expect(trayStatus({ working: 0, waiting: 0, routines: 4 }, 'zh-CN')).toEqual(['没有同事在干活'])
     expect(trayStatus({ working: 0, waiting: 1, routines: 0 }, 'zh-CN')).toEqual(['没有同事在干活', '1 件事等你'])
     expect(trayStatus(null, 'en')).toEqual(['Gateway not running'])
+    expect(texts('en').update('0.7.0')).toBe('Version 0.7.0 is available — Download…')
+    expect(texts('zh-CN').update('0.7.0')).toBe('有新版本 0.7.0 — 去下载…')
   })
 })
 
