@@ -150,6 +150,11 @@ describe('Release workflow and per-arch packaging commands (D3)', () => {
     const tagStep = pkgJob.steps.find((s) => s.run?.includes('desktop/package.json'))
     expect(tagStep?.if).toContain("github.ref_type == 'tag'")
 
+    // 打包完必须在 macOS 和 Linux（装上 .deb + xvfb）上各跑一遍打包产物冒烟测试
+    const pkgRuns = pkgJob.steps.map((s) => s.run ?? '').join('\n')
+    expect(pkgRuns).toContain('smoke:desktop')
+    expect(pkgRuns).toContain('xvfb-run')
+
     const relJob = wf.jobs.release!
     expect(relJob).toBeDefined()
     expect(relJob.needs).toBe('package')

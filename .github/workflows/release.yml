@@ -62,6 +62,19 @@ jobs:
         run: |
           codesign --verify --deep --strict desktop/release/mac-arm64/OpenSuperBot.app
           codesign --verify --deep --strict desktop/release/mac/OpenSuperBot.app
+      - name: Packaged app smoke test (macOS)
+        if: runner.os == 'macOS'
+        env:
+          SMOKE_EXPECT_SANDBOX: '1'
+        run: pnpm run smoke:desktop desktop/release/mac-arm64/OpenSuperBot.app --real-data-dir
+      - name: Install .deb and smoke test packaged app (Linux)
+        if: runner.os == 'Linux'
+        env:
+          SMOKE_EXPECT_SANDBOX: '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb ./desktop/release/*.deb
+          xvfb-run -a pnpm run smoke:desktop /opt/OpenSuperBot/opensuperbot --real-data-dir
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
