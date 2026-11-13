@@ -7,6 +7,13 @@ names.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-12
+
+A desktop app for macOS and Linux (`.dmg`, `.deb`, `.AppImage`), a first-run setup wizard, a settings page and a
+refined workbench UI — so trying OpenSuperBot needs neither Node, pnpm, Docker nor a terminal — plus `@` mentions in
+group threads, file and PDF attachments, a startup release check (with no auto-updater while builds are unsigned), and
+a tool-scoping fix so only turns you start can change rules or routines.
+
 ### Security
 
 - **Only turns you start can change a teammate's standing setup.** Saving or forgetting a rule and creating or
@@ -64,31 +71,38 @@ names.
   size. CJK radical look-alikes and Latin ligatures in the extracted text are replaced by the real characters, so
   the text can be searched. This adds one dependency, `unpdf`, which has no native code.
 
-- **Groundwork for the desktop app.** The gateway can run inside the app: it tells the app when it is ready and on
-  which port, shuts down in order when the app asks (routines stop, computers and their Chrome close), downloads
-  the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's runtime.
-  Run from source, nothing changes. A first desktop shell (`desktop/`, Electron 44.9.3) starts the gateway, signs
-  its window in without a sign-in link, restarts a crashed gateway, and shows an error page with the log when it
-  cannot start. Its window shows only the gateway's UI: other sites open in your browser, the gateway's own pages
-  open in an app window, signed in, other kinds of links are blocked, attachments download to your Downloads
-  folder without overwriting, and pages may only show notifications and write to the clipboard. If port 4747 is
-  taken (a gateway run from source, say) it takes the next free one and keeps it, so webhook addresses stay
-  put; Settings → About shows the port. Closing the window keeps it running, with a menu bar icon and a Dock badge
-  for what waits on you; approvals, questions and sign-in requests notify while the window is away; quitting from
-  the app asks first while work or routines are running. It can open when you log in, off unless you tick it on
-  the wizard's last step or in Settings: on macOS as a login item, falling back to a LaunchAgent when the system
-  will not take an unsigned app (and saying so when you have turned it off in System Settings), on Linux as an
-  autostart entry. Pages get no Node; the gateway's own page gets the app version and start-at-login, checked by
-  the app on every call. There is no download yet; `pnpm desktop` runs it from a checkout (see `desktop/README.md`).
-- **Desktop installers, built from a checkout.** `pnpm desktop:package` makes two macOS dmgs (Apple silicon and
-  Intel, ad-hoc signed, not notarized) or, on Linux, an AppImage and a deb for x64 and arm64; the Linux packages
-  can be built on a Mac too. The app carries the gateway with only its production dependencies, outside the asar,
-  and a single SQLite binary for its platform; a dmg is about 135 MB. The AppImage uses the static AppImage
-  runtime, so it opens without FUSE 2 (not installed by default since Ubuntu 22.04), and the gateway strips the
-  AppImage's library and schema paths before launching a browser or sandboxed commands. On Ubuntu 24.04+, where
-  AppArmor blocks unprivileged user namespaces by default, the deb installs AppArmor profiles for the app, its
-  downloaded browser and `bubblewrap` (and pulls `bubblewrap` in); under an AppImage on those systems, the commands
-  switch stays locked and explains why instead of running without a sandbox. There are no published downloads yet.
+- **The desktop app (`desktop/`, Electron 44.9.3).** The gateway can run inside the app: it tells the app when it is
+  ready and on which port, shuts down in order when the app asks (routines stop, computers and their Chrome close),
+  downloads the browser with the app's own runtime, and gives commands in the sandbox a `node` that is the app's
+  runtime. Run from source, nothing changes. The shell starts the gateway, signs its window in without a sign-in link,
+  restarts a crashed gateway, and shows an error page with redacted diagnostics and the log tail when it cannot start.
+  Its window shows only the gateway's UI: other sites open in your browser, the gateway's own pages open in an app
+  window, signed in, other kinds of links are blocked, attachments download to your Downloads folder without
+  overwriting, and pages may only show notifications and write to the clipboard. If port 4747 is taken (a gateway run
+  from source, say) it takes the next free one and keeps it, so webhook addresses stay put; Settings → About shows the
+  port. Closing the window keeps it running, with a menu bar icon (tray on Linux) and a Dock badge for what waits on
+  you; approvals, questions and sign-in requests notify while the window is away; quitting from the app asks first
+  while work or routines are running. It can open when you log in, off unless you tick it on the wizard's last step or
+  in Settings: on macOS as a login item, falling back to a LaunchAgent when the system will not take an unnotarized
+  app (and saying so when you have turned it off in System Settings), on Linux as an autostart entry. When update
+  checks are enabled in Settings (the default), startup makes one `GET` to GitHub's `releases/latest` and shows a
+  download link in the menu bar / tray and in Settings → Desktop app when a newer stable version is out; turning it off
+  makes zero requests, and the app never downloads or installs updates automatically. Pages get no Node; the gateway's
+  own page gets the app version, release notice and start-at-login, checked by the app on every call. See
+  [docs/desktop.md](docs/desktop.md) and `desktop/README.md`.
+- **Mac and Linux installers, release workflow and packaged smoke test.** `pnpm desktop:package` and
+  `.github/workflows/release.yml` build two macOS `.dmg`s (Apple silicon and Intel, ad-hoc signed, not notarized) and
+  Linux `.deb` and `.AppImage` installers for `x64` and `arm64`, verify packaged builds end to end with
+  `scripts/smoke-desktop.ts` (`pnpm run smoke:desktop`: Playwright `_electron` with `chromiumSandbox: true`, stepping
+  through demo mode, driving a real browser screenshot and checking that quitting leaves no Chrome or gateway process
+  behind), and publish a draft GitHub Release with `SHA256SUMS.txt`. The app carries the gateway with only its
+  production dependencies, outside the asar, and a single SQLite binary for its platform; a dmg is about 135 MB. The
+  AppImage uses the static AppImage runtime, so it opens without FUSE 2 (not installed by default since Ubuntu 22.04),
+  and the gateway strips the AppImage's library, schema and data paths before launching a browser or sandboxed
+  commands. On Ubuntu 24.04+, where AppArmor blocks unprivileged user namespaces by default, the `.deb` pulls
+  `bubblewrap` in and installs AppArmor `userns` profiles for the app, its downloaded browser and `bubblewrap`; under
+  an AppImage on those systems, the commands switch probes `bubblewrap` and stays locked with a clear explanation
+  instead of running without a sandbox.
 
 ### Changed
 
@@ -577,7 +591,8 @@ A self-hosted Grok Bot alternative assembled from OpenClaw: three preconfigured 
 Ticker) with strict boundaries, agent-to-agent handoffs, any model provider, a one-command setup that never
 overwrites an existing OpenClaw config, a Docker/VPS path and an honest comparison with Grok Bot.
 
-[Unreleased]: https://github.com/wolfqing/OpenSuperBot/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/wolfqing/OpenSuperBot/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/wolfqing/OpenSuperBot/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/wolfqing/OpenSuperBot/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wolfqing/OpenSuperBot/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/wolfqing/OpenSuperBot/compare/v0.3.0...v0.3.1

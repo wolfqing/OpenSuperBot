@@ -1,7 +1,9 @@
 # Running it always-on
 
-The point of a teammate is that it keeps working when you close the laptop. This page turns the dev setup into
-a service: one process, one port, started at boot, reachable from your other machines through a tunnel.
+The point of a teammate is that it keeps working when you close the laptop. This page turns a source checkout into
+a service: one process, one port, started at boot, reachable from your other machines through a tunnel. (Using the
+macOS or Linux desktop app instead? Closing its window keeps teammates running, and **Settings → Desktop app** turns on
+start at login — see [desktop.md](desktop.md).)
 
 ## One process, one port
 
@@ -117,7 +119,7 @@ curl -X POST -H 'Content-Type: application/json' -H 'X-OpenSuperBot-Key: <key>' 
 | Variable | Default | What it does |
 |---|---|---|
 | `OPENSUPERBOT_API_BASE` | `https://api.x.ai/v1` | Any OpenAI-compatible endpoint |
-| `OPENSUPERBOT_API_KEY` | — | Your key; never written to disk |
+| `OPENSUPERBOT_API_KEY` | — | Your key. An env var key stays in memory and is never written to disk; keys saved in the UI live in `<data>/llm-key` and `<data>/llm-keys/` (`0600`, or a user-only ACL on Windows) |
 | `OPENSUPERBOT_MODEL` | `grok-4.7` | `stub` runs offline with no key |
 | `OPENSUPERBOT_HOST` / `OPENSUPERBOT_PORT` | `127.0.0.1` / `4747` | Where the gateway listens |
 | `OPENSUPERBOT_DATA` | `gateway/data` | SQLite, bot data, workspaces, the token |

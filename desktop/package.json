@@ -2,7 +2,7 @@
   "name": "@opensuperbot/desktop",
   "productName": "OpenSuperBot",
   "desktopName": "opensuperbot.desktop",
-  "version": "0.6.0-dev",
+  "version": "0.6.0",
   "private": true,
   "description": "OpenSuperBot desktop app: hosts the gateway and shows the UI in a window",
   "type": "module",

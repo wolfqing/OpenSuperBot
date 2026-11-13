@@ -5,7 +5,9 @@ in with the gateway's token (a cookie, so there is no sign-in link) and shows th
 is restarted (at most 3 times in 5 minutes); if it cannot start, the window shows an error page with the last log
 lines, a button to copy diagnostics and one to open the log folder. Only one copy runs at a time.
 
-There is no download yet (release builds and update notices are still in progress). To run it from a checkout:
+Installers for macOS (`.dmg`) and Linux (`.deb` and `.AppImage`) are published on
+[GitHub Releases](https://github.com/wolfqing/OpenSuperBot/releases/latest); see [docs/desktop.md](../docs/desktop.md)
+for installing, opening the ad-hoc signed macOS app, update checks and clean uninstalling. To run it from a checkout:
 
 ```bash
 pnpm install
@@ -53,10 +55,20 @@ Linux it writes `~/.config/autostart/opensuperbot.desktop` (`$XDG_CONFIG_HOME` i
 for an AppImage). Run from source it is not offered, because the login item would open a bare Electron.
 
 Pages get no Node and no Electron. The main window's page sees one frozen object, `window.opensuperbot`, with
-`info()` (app version, platform, Electron version) and `loginItem.get()` / `loginItem.set(on)`; every call is
-checked in the main process to come from the gateway's own page, not a frame inside it or the error page.
+`info()` (app version, platform, Electron version, and any available release notice) and `loginItem.get()` /
+`loginItem.set(on)`; every call is checked in the main process to come from the gateway's own page, not a frame
+inside it or the error page.
 
-For smoke tests: `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser,
+When the gateway first comes up and `checkUpdates` is on in Settings (the default), the app sends one
+`GET https://api.github.com/repos/wolfqing/OpenSuperBot/releases/latest` request (`OPENSUPERBOT_DESKTOP_RELEASES_URL`
+overrides it in tests) and shows a download link in the menu bar / tray and in Settings → Desktop app when a newer
+stable version is out. When turned off in Settings, it sends no request. It never downloads or installs updates
+automatically.
+
+For smoke tests: `pnpm run smoke:desktop` (`scripts/smoke-desktop.ts`) launches a packaged build through Playwright's
+`_electron` (`SMOKE_APP_PATH` overrides the executable, `SMOKE_EXPECT_SANDBOX=1` also runs the command sandbox
+self-check), steps through demo mode, drives a real browser screenshot, and verifies that quitting leaves no Chrome or
+gateway process behind. `OPENSUPERBOT_DESKTOP_NO_EXTERNAL=1` logs links instead of opening the browser,
 `OPENSUPERBOT_DESKTOP_DOWNLOADS` points downloads at another folder, and with `OPENSUPERBOT_DESKTOP_TEST=1` the app
 reads `close` and `quit` from standard input, while `OPENSUPERBOT_DESKTOP_QUIT_ANSWERS=cancel,quit` answers the quit
 question in order, and `OPENSUPERBOT_DESKTOP_LOGIN_HOME` makes start at login act as in an installed app but write

@@ -106,7 +106,25 @@ OpenAI 兼容的模型。
 
 ## 快速开始
 
-需要 Node 22+ 和 pnpm。**Docker 可选。** 不装 Docker，每位同事得到一台「本机电脑」：在你机器上有它自己的浏览器
+### 下载桌面版（macOS 与 Linux）
+
+直接从 **[GitHub Releases](https://github.com/wolfqing/OpenSuperBot/releases/latest)** 下载对应安装包：macOS Apple
+芯片选 `mac-arm64.dmg`、Intel 选 `mac-x64.dmg`；Ubuntu / Debian 选 `linux-amd64.deb` 或 `linux-arm64.deb`；其他 Linux
+发行版选 `linux-x86_64.AppImage` 或 `linux-arm64.AppImage`。不需要装 Node、pnpm、Docker，也不用碰终端：打开后跟着向导选语言、
+粘贴一家模型的 key（或零 key 点「先看看」进演示模式）、检查浏览器与沙箱，就能进对话派活。
+
+首次打开说明：
+
+- **macOS：** 首版安装包采用本地 ad-hoc 签名，尚未做 Apple 开发者公证。请先把 **OpenSuperBot** 拖进「应用程序」再打开；
+  第一次弹出「未打开“OpenSuperBot”」时点**完成**（不要点移到废纸篓），再去**系统设置 → 隐私与安全性**底部点**仍要打开**即可。
+- **Ubuntu 24.04+：** 请优先安装 `.deb` 包——它会自动装好 `bubblewrap` 与对应的 AppArmor 规则，让命令行沙箱开箱可用。
+
+带截图的完整步骤、启动更新检查说明（仅发一次 GitHub 请求、不自动更新、可在设置里关闭）、数据目录与干净卸载方式见
+[docs/desktop.md](docs/desktop.md)。
+
+### 从源码运行
+
+适合 Windows（首版暂无桌面安装包）、服务器常驻或本地改代码。需要 Node 22+ 和 pnpm。**Docker 可选。** 不装 Docker，每位同事得到一台「本机电脑」：在你机器上有它自己的浏览器
 （有 Chrome / Edge / Chromium 就直接用，没有就自动下载一次）和自己的文件夹；Docker 开着时，每位同事得到一个
 封闭的容器。本机电脑支持 macOS、Linux 和 Windows；Windows 上它有浏览器和文件夹，但没有命令行——在 Windows 上需要
 命令行的同事，请给它一台 Docker 电脑。
@@ -154,7 +172,7 @@ Linux 用 bubblewrap），只能写这位同事自己的文件夹。Windows 没�
 | 环境变量 | 默认值 | 作用 |
 |---|---|---|
 | `OPENSUPERBOT_API_BASE` | `https://api.x.ai/v1` | 任何 OpenAI 兼容端点 |
-| `OPENSUPERBOT_API_KEY` | — | 你的 key。从这里给的 key 不会写进任何文件；在向导里填的会存进数据目录，只有你能读 |
+| `OPENSUPERBOT_API_KEY` | — | 你的 key。环境变量给的 key 只留在内存里、绝不写盘；在向导或「AI 模型」里保存的 key 存进 `<数据目录>/llm-key` 和 `<数据目录>/llm-keys/`（权限 `0600`，Windows 上设为仅当前用户可读的 ACL） |
 | `OPENSUPERBOT_MODEL` | `grok-4.7` | 填 `stub` 可离线零 key 运行 |
 | `OPENSUPERBOT_DATA` | `gateway/data` | SQLite、bot 数据、工作区、gateway 令牌 |
 | `OPENSUPERBOT_COMPUTERS` | `auto` | `docker`、`local`，或 `auto`（Docker 在跑、镜像建好了就用 Docker，否则本机） |
@@ -215,8 +233,10 @@ Build 驱动你本机的 `grok` 命令行——会话按项目分组，Markdown�
       Grok Bot 唯一没有开源等价物的能力；已有贡献者接下第一步（录制器和录制格式），在 [#1](../../issues/1)
 - [x] **不用 Docker 的电脑**（macOS 和 Linux）——每位同事独立的浏览器 profile 和文件夹，命令行默认关、打开后跑在
       系统沙箱里（v0.4.0）；Windows 上有浏览器和文件夹
-- [ ] 带首次启动向导的桌面 App，试用时不需要 Docker、Node 和终端；之后是 macOS 26 上的 Apple container 后端。
-      计划见 [docs/local-computers.md](docs/local-computers.md)
+- [x] **带首次启动向导的桌面 App**（macOS 和 Linux）——试用不需要 Docker、Node 和终端，支持菜单栏/托盘常驻、开机自启与
+      中英双语界面（v0.6.0，见 [docs/desktop.md](docs/desktop.md)）
+- [ ] **macOS 26 上的 Apple container 后端**（免 Docker 的轻量虚拟机隔离）与 Windows 桌面安装包。计划见
+      [docs/local-computers.md](docs/local-computers.md)
 - [ ] Telegram 作为离开电脑时的通知 / 审批补位渠道
 - [ ] 一条命令起 VPS 镜像（cloud-init）
 
@@ -233,8 +253,10 @@ Build 驱动你本机的 `grok` 命令行——会话按项目分组，Markdown�
 自己的浏览器和文件夹。Docker 换来的是更强的隔离（每位同事一个容器，带资源上限）；在 Windows 上，目前仍然只有
 Docker 能给同事命令行。见 [docs/local-computers.md](docs/local-computers.md)。
 
-更多见 [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
-[docs/security.md](docs/security.md) · [docs/comparison.md](docs/comparison.md) · [CHANGELOG.md](CHANGELOG.md)
+更多见 [docs/desktop.md](docs/desktop.md) · [docs/models.md](docs/models.md) · [docs/faq.md](docs/faq.md) ·
+[docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
+[docs/security.md](docs/security.md) · [docs/workflows.md](docs/workflows.md) · [docs/comparison.md](docs/comparison.md) ·
+[CHANGELOG.md](CHANGELOG.md)
 
 ## 免责声明
 

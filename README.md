@@ -119,11 +119,32 @@ Every line below is implemented and covered by tests — nothing here is a roadm
 
 ## Quickstart
 
-Needs Node 22+ and pnpm. **Docker is optional.** Without it, each teammate gets a *local computer*: a browser of
-its own on your machine (your Chrome, Edge or Chromium if you have one — otherwise one is downloaded once) and a
-folder of its own. With Docker running, each gets a sealed container instead. Local computers run on macOS,
-Linux and Windows; on Windows they get the browser and the folder but no commands, so a teammate that needs a
-shell there gets a Docker computer.
+### Download the desktop app (macOS and Linux)
+
+Grab the installer for your machine from **[GitHub Releases](https://github.com/wolfqing/OpenSuperBot/releases/latest)**
+— `mac-arm64.dmg` (Apple silicon), `mac-x64.dmg` (Intel), `linux-amd64.deb` / `linux-arm64.deb` (Ubuntu and Debian),
+or `linux-x86_64.AppImage` / `linux-arm64.AppImage` (other Linux). You do not need Node, pnpm, Docker or a terminal:
+open it and a short wizard walks through language, connecting an AI service (or looking around in demo mode with no
+key), and checking your browser and command sandbox.
+
+First-open notes:
+
+- **macOS:** the app is ad-hoc signed and not notarized with an Apple Developer ID yet. Drag **OpenSuperBot** into
+  **Applications**, open it once, click **Done** when macOS blocks it, then click **Open Anyway** in **System
+  Settings → Privacy & Security**.
+- **Ubuntu 24.04+:** prefer the `.deb` over the `.AppImage` — it installs `bubblewrap` and the AppArmor profiles
+  needed for unprivileged user namespaces, so the command sandbox works out of the box.
+
+Step-by-step screenshots, startup update checks (one GitHub request, no auto-update, switchable in Settings), data
+locations and clean uninstall instructions are in [docs/desktop.md](docs/desktop.md).
+
+### Run from source
+
+For Windows (which has no desktop installer yet), servers, or hacking on the repo. Needs Node 22+ and pnpm. **Docker
+is optional.** Without it, each teammate gets a *local computer*: a browser of its own on your machine (your Chrome,
+Edge or Chromium if you have one — otherwise one is downloaded once) and a folder of its own. With Docker running,
+each gets a sealed container instead. Local computers run on macOS, Linux and Windows; on Windows they get the
+browser and the folder but no commands, so a teammate that needs a shell there gets a Docker computer.
 
 ```bash
 git clone https://github.com/wolfqing/OpenSuperBot.git
@@ -172,7 +193,7 @@ pnpm start` and the launchd / systemd / Windows Task Scheduler templates in [doc
 | Variable | Default | What it does |
 |---|---|---|
 | `OPENSUPERBOT_API_BASE` | `https://api.x.ai/v1` | Any OpenAI-compatible endpoint |
-| `OPENSUPERBOT_API_KEY` | — | Your key. A key set here is never written to disk; one entered in the wizard is saved in the data folder, readable only by you |
+| `OPENSUPERBOT_API_KEY` | — | Your key. A key set here stays in memory and is never written to disk; keys saved in the wizard or **AI models** live in `<data>/llm-key` and `<data>/llm-keys/` (`0600`, or a user-only ACL on Windows) |
 | `OPENSUPERBOT_MODEL` | `grok-4.7` | `stub` runs offline with no key |
 | `OPENSUPERBOT_DATA` | `gateway/data` | SQLite, bot data, workspaces, the gateway token |
 | `OPENSUPERBOT_COMPUTERS` | `auto` | `docker`, `local`, or `auto` (Docker if it is running and the image is built, else local) |
@@ -237,8 +258,10 @@ official xAI product. [Download the latest release](https://github.com/wolfqing/
       first slice (the recorder and its trace format) in [#1](../../issues/1)
 - [x] **Computers without Docker** on macOS and Linux — a browser profile and a folder per teammate, commands
       off by default and sandboxed when on (v0.4.0); on Windows, the browser and the folder
-- [ ] A desktop app with a first-run wizard, so trying it needs no Docker, Node or terminal; then an Apple
-      container backend on macOS 26. Plan in [docs/local-computers.md](docs/local-computers.md)
+- [x] **Desktop app with a first-run wizard** on macOS and Linux — no Docker, Node or terminal needed, menu bar /
+      tray presence, start at login, English and Chinese UI (v0.6.0; [docs/desktop.md](docs/desktop.md))
+- [ ] **Apple container backend** on macOS 26 for VM isolation without Docker, and a Windows desktop installer.
+      Plan in [docs/local-computers.md](docs/local-computers.md)
 - [ ] Telegram as a notification / approval surface for when you are away from the desk
 - [ ] One-command VPS image (cloud-init)
 
@@ -257,7 +280,8 @@ browser and a folder of its own on your machine. Docker buys stronger isolation 
 resource limits), and on Windows it is still the only way to give a teammate a shell. See
 [docs/local-computers.md](docs/local-computers.md).
 
-More in [docs/faq.md](docs/faq.md) · [docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
+More in [docs/desktop.md](docs/desktop.md) · [docs/models.md](docs/models.md) · [docs/faq.md](docs/faq.md) ·
+[docs/multi-bot.md](docs/multi-bot.md) · [docs/attachments.md](docs/attachments.md) · [docs/always-on.md](docs/always-on.md) ·
 [docs/security.md](docs/security.md) · [docs/workflows.md](docs/workflows.md) · [docs/comparison.md](docs/comparison.md) ·
 [CHANGELOG.md](CHANGELOG.md)
 
