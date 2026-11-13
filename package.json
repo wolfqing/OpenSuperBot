@@ -11,7 +11,8 @@
     "start": "pnpm --filter @opensuperbot/gateway start",
     "desktop": "pnpm build && pnpm --filter @opensuperbot/desktop build && pnpm --filter @opensuperbot/desktop start",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --workspace-concurrency=1 test"
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "desktop:package": "node desktop/scripts/stage.mjs && pnpm --filter @opensuperbot/desktop package"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -21,6 +22,7 @@
       "better-sqlite3",
       "cpu-features",
       "electron",
+      "electron-winstaller",
       "protobufjs",
       "ssh2"
     ]

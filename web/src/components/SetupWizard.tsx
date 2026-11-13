@@ -4,6 +4,7 @@ import { useT, type MessageKey, type T } from '../i18n'
 import { sandboxMissingText } from '../i18n/describe'
 import type { BrowserStatus, CheckResult, ConnectionsState, FieldError, ModelConnection, ProviderPreset, SetupInfo } from '../types'
 import { CheckLine, NOTES, checkText, fieldText } from './ModelsDialog'
+import { StartAtLogin } from './StartAtLogin'
 
 /** 设置里的界面语言：空 = 跟系统 */
 export type LanguageSetting = '' | 'en' | 'zh-CN'
@@ -25,7 +26,7 @@ const host = (url: string) => {
 }
 
 /**
- * 首次启动向导：欢迎/语言 → 选服务商 → 粘 key、测试 → 选模型 → 电脑检查 → 进 Chief 的对话。
+ * 首次启动向导：欢迎/语言 → 选服务商 → 粘 key、测试 → 选模型 → 电脑检查 → 进 Chief 的对话（桌面版在这一步问开机自启）。
  * 前四步都能「先看看」进演示模式（stub 模型，不花钱也不联网），之后照样检查电脑。
  */
 export function SetupWizard({ setup, providers, main, browser, language, onLanguage, onBrowser, onConnections, onDone, onCancel }: {
@@ -320,6 +321,7 @@ export function SetupWizard({ setup, providers, main, browser, language, onLangu
             <h1 className="setup-title">{demo ? t('setup.ready.titleDemo') : t('setup.ready.title')}</h1>
             <p className="setup-body">{t('setup.ready.body')}</p>
             {demo ? <p className="setup-hint">{t('setup.demoHint')}</p> : null}
+            <StartAtLogin where="wizard" />
             <div className="setup-examples">
               {EXAMPLES.map((key) => (
                 <button type="button" key={key} className="setup-example" onClick={() => onDone(t(key))}>{t(key)}</button>

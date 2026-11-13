@@ -5,6 +5,9 @@
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch scripts/dev.ts",
     "build": "tsc -p tsconfig.build.json",

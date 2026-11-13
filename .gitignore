@@ -10,3 +10,5 @@ gateway/data/
 gateway/data-stub/
 gateway/data-local-stub/
 *.tsbuildinfo
+desktop/stage/
+desktop/release/
