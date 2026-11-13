@@ -81,9 +81,13 @@ target's better-sqlite3 prebuild (they are N-API, nothing is rebuilt for Electro
 - macOS: ad-hoc signed and not notarized (there is no developer account yet), so the first open needs
   "Open Anyway" in System Settings → Privacy & Security. The dmg window shows the app next to an Applications
   shortcut, to drag it there.
-- Linux: the AppImage uses the static AppImage runtime, which needs neither FUSE 2 nor any other system library.
-  The deb installs to `/opt/OpenSuperBot`, with a menu entry and an `opensuperbot` command, and depends on ALSA as well as the
-  usual GTK and NSS libraries.
+- Linux: the AppImage uses the static AppImage runtime, which needs neither FUSE 2 nor any other system library;
+  the gateway strips the AppImage's `LD_LIBRARY_PATH`, `GSETTINGS_SCHEMA_DIR` and `APPDIR` before launching Chrome or
+  sandboxed commands. The deb installs to `/opt/OpenSuperBot`, with a menu entry and an `opensuperbot` command,
+  depends on `bubblewrap` and ALSA as well as the usual GTK and NSS libraries, and on Ubuntu 24.04+ installs AppArmor
+  `userns` profiles for the app, its downloaded browser and `/usr/bin/bwrap` (when no profile covers `bwrap` yet). On
+  Ubuntu 24.04+, prefer the deb: an AppImage cannot install AppArmor profiles, so commands stay off and say why
+  rather than running without a sandbox.
 
 In China, fetch through the mirrors: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` and
 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`.

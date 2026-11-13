@@ -33,6 +33,8 @@ describe('errors', () => {
 
   it('spell out why there is no sandbox, or say nothing more when the gateway gave no reason', () => {
     expect(errorText(zh, { message: 'x', code: 'no_sandbox', params: { why: 'install_bwrap' } })).toMatch(/没有能跑命令的沙箱。装上 bubblewrap/)
+    expect(errorText(zh, { message: 'x', code: 'no_sandbox', params: { why: 'userns_blocked' } })).toMatch(/AppArmor.*\.deb/)
+    expect(errorText(zh, { message: 'x', code: 'browser_sandbox_blocked' })).toMatch(/AppArmor.*\.deb/)
     expect(errorText(en, { message: 'x', code: 'no_sandbox' })).toBe('No sandbox for commands on this machine.')
   })
 

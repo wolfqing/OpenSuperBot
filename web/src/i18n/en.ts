@@ -312,6 +312,7 @@ export const en = {
   'error.image_missing': 'The bot computer image {image} is not built yet. Run: {command}',
   'error.browser_missing': 'OPENSUPERBOT_BROWSER points to {path}, which does not exist.',
   'error.browser_download_failed': 'The browser download failed: {detail} Install Google Chrome instead, or point OPENSUPERBOT_BROWSER at a Chromium-based browser.',
+  'error.browser_sandbox_blocked': 'Linux blocked the browser’s sandbox (Ubuntu 24.04+ AppArmor restricts unprivileged user namespaces). Install the .deb package — it includes the AppArmor profile — or install Google Chrome.',
   'error.no_screen': 'This computer has no screen to stream.',
   'error.too_large': 'That file is over 8 MB.',
   'error.type_not_allowed': 'That kind of file cannot be sent. Images, PDFs, text and Markdown files can.',
@@ -324,6 +325,7 @@ export const en = {
   'error.too_many_attachments': 'A message can carry 8 files.',
 
   'sandbox.install_bwrap': 'Install bubblewrap (apt install bubblewrap, or dnf install bubblewrap), then try again.',
+  'sandbox.userns_blocked': 'This Linux system blocks unprivileged user namespaces (Ubuntu 24.04+ AppArmor), which bubblewrap needs. Install the .deb package — it includes the AppArmor profile — or allow userns for /usr/bin/bwrap.',
   'sandbox.no_sandbox_exec': 'macOS normally ships /usr/bin/sandbox-exec; this machine seems to be missing it.',
   'sandbox.unsupported_os': 'Commands on a local computer need macOS or Linux. On Windows, give this teammate a Docker computer instead.',
 

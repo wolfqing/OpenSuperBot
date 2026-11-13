@@ -309,6 +309,7 @@ export const zhCN: Record<MessageKey, string> = {
   'error.image_missing': '同事电脑的镜像 {image} 还没建。运行：{command}',
   'error.browser_missing': 'OPENSUPERBOT_BROWSER 指向的 {path} 不存在。',
   'error.browser_download_failed': '浏览器下载失败：{detail} 可以改装 Google Chrome，或者把 OPENSUPERBOT_BROWSER 指向一个 Chromium 内核的浏览器。',
+  'error.browser_sandbox_blocked': 'Linux 拦住了浏览器的沙箱（Ubuntu 24.04+ 的 AppArmor 默认限制非特权用户命名空间）。请改用 .deb 安装包（自带 AppArmor 规则），或安装 Google Chrome。',
   'error.no_screen': '这台电脑没有可以传过来的屏幕。',
   'error.too_large': '这个文件超过 8 MB 了。',
   'error.type_not_allowed': '这种文件发不了。能发的是图片、PDF、文本和 Markdown 文件。',
@@ -321,6 +322,7 @@ export const zhCN: Record<MessageKey, string> = {
   'error.too_many_attachments': '一条消息最多带 8 个文件。',
 
   'sandbox.install_bwrap': '装上 bubblewrap（apt install bubblewrap 或 dnf install bubblewrap）后再试。',
+  'sandbox.userns_blocked': '这个 Linux 系统拦住了非特权用户命名空间（Ubuntu 24.04+ 的 AppArmor 默认限制），bubblewrap 需要它才能建沙箱。请改用 .deb 安装包（自带 AppArmor 规则），或给 /usr/bin/bwrap 放行 userns。',
   'sandbox.no_sandbox_exec': 'macOS 本来自带 /usr/bin/sandbox-exec，这台机器上好像没有。',
   'sandbox.unsupported_os': '本机电脑跑命令需要 macOS 或 Linux。在 Windows 上，请给这位同事换成密封电脑（Docker）。',
 

@@ -54,8 +54,12 @@ module.exports = {
   // （只有装了 zlib1g-dev 才有），在普通桌面上根本起不来
   toolsets: { appimage: '1.0.3' },
   deb: {
-    // electron-builder 默认的依赖表 + ALSA：Electron 链接了 libasound.so.2，精简系统（服务器装桌面、容器）没有就起不来。
-    // Ubuntu 24.04 起它叫 libasound2t64（t64 过渡）
-    depends: ['libgtk-3-0', 'libnotify4', 'libnss3', 'libxss1', 'libxtst6', 'xdg-utils', 'libatspi2.0-0', 'libuuid1', 'libsecret-1-0', 'libasound2t64 | libasound2'],
+    // electron-builder 默认的依赖表 + ALSA（精简系统缺 libasound.so.2，Ubuntu 24.04 起叫 libasound2t64）+ bubblewrap（本机命令沙箱）。
+    // Ubuntu 24.04 起 AppArmor 默认拦非特权 user namespace：apparmor-profile 放行 App 和下载到数据目录里的 Chrome，
+    // after-install 另外在系统还没有 bwrap 规则时给 /usr/bin/bwrap 补一份
+    depends: ['libgtk-3-0', 'libnotify4', 'libnss3', 'libxss1', 'libxtst6', 'xdg-utils', 'libatspi2.0-0', 'libuuid1', 'libsecret-1-0', 'libasound2t64 | libasound2', 'bubblewrap'],
+    appArmorProfile: 'resources/apparmor-profile',
+    afterInstall: 'resources/after-install.sh',
+    afterRemove: 'resources/after-remove.sh',
   },
 }

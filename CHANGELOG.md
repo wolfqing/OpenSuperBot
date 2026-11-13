@@ -84,8 +84,11 @@ names.
   Intel, ad-hoc signed, not notarized) or, on Linux, an AppImage and a deb for x64 and arm64; the Linux packages
   can be built on a Mac too. The app carries the gateway with only its production dependencies, outside the asar,
   and a single SQLite binary for its platform; a dmg is about 135 MB. The AppImage uses the static AppImage
-  runtime, so it opens without FUSE 2 (not installed by default since Ubuntu 22.04). There are no published
-  downloads yet.
+  runtime, so it opens without FUSE 2 (not installed by default since Ubuntu 22.04), and the gateway strips the
+  AppImage's library and schema paths before launching a browser or sandboxed commands. On Ubuntu 24.04+, where
+  AppArmor blocks unprivileged user namespaces by default, the deb installs AppArmor profiles for the app, its
+  downloaded browser and `bubblewrap` (and pulls `bubblewrap` in); under an AppImage on those systems, the commands
+  switch stays locked and explains why instead of running without a sandbox. There are no published downloads yet.
 
 ### Changed
 

@@ -4,7 +4,7 @@ import { join, posix, win32 } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createLocalBackend } from '../src/backend.js'
 import type { BrowserLike, CdpSessionLike, PageLike } from '../src/browser-page.js'
-import { createLocalComputer, workspacePath, type LocalLaunch } from '../src/computer-local.js'
+import { browserLaunchError, createLocalComputer, workspacePath, type LocalLaunch } from '../src/computer-local.js'
 
 let dir: string
 beforeEach(async () => { dir = await realpath(await mkdtemp(join(tmpdir(), 'osb-local-'))) })
@@ -442,5 +442,21 @@ describe('LocalComputer screen across a relaunch', () => {
     await c.screencast!(() => {}, { onEnd: () => { ended += 1 } })
     await c.dispose()
     expect(ended).toBe(3)
+  })
+})
+
+describe('browserLaunchError', () => {
+  it('turns Chromium’s Ubuntu 24.04 userns sandbox crash into a coded error the UI can explain', () => {
+    const raw = new Error(
+      'browserType.launchPersistentContext: Target page, context or browser has been closed\n'
+      + '[pid=1234][err] [1234:1234:FATAL:zygote_host_impl_linux.cc(128)] No usable sandbox! '
+      + 'If you are running on Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user namespaces with AppArmor…',
+    )
+    const coded = browserLaunchError(raw)
+    expect(coded).toMatchObject({ code: 'browser_sandbox_blocked' })
+    expect(coded.message).toMatch(/\.deb/)
+
+    const other = new Error('something unrelated')
+    expect(browserLaunchError(other)).toBe(other)
   })
 })

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  bubblewrapArgs, detectSandbox, homeLeaks, runSandboxed, sandboxEnv, sandboxHint, sandboxSelfCheck, sandboxedCommand, seatbeltProfile,
+  bubblewrapArgs, detectSandbox, homeLeaks, probeSandbox, runSandboxed, sandboxEnv, sandboxHint, sandboxSelfCheck, sandboxedCommand, seatbeltProfile,
 } from '../src/sandbox.js'
 
 const have = (...paths: string[]) => (p: string) => paths.includes(p)
@@ -17,6 +17,26 @@ describe('detectSandbox', () => {
     expect(detectSandbox('win32', () => true)).toBeNull()
     expect(sandboxHint('linux')).toMatch(/bubblewrap/)
     expect(sandboxHint('win32')).toMatch(/Docker/)
+  })
+
+  it('probes bubblewrap on Linux so Ubuntu 24.04 AppArmor blocks lock the switch up front with a clear reason', () => {
+    expect(probeSandbox({ platform: 'darwin', exists: have('/usr/bin/sandbox-exec') }))
+      .toEqual({ available: true, sandbox: { kind: 'seatbelt', executable: '/usr/bin/sandbox-exec' } })
+    expect(probeSandbox({ platform: 'linux', exists: () => false }))
+      .toMatchObject({ available: false, sandbox: null, whyCode: 'install_bwrap' })
+    const runs: { file: string; args: string[] }[] = []
+    expect(probeSandbox({
+      platform: 'linux', exists: have('/usr/bin/bwrap'),
+      run: (file, args) => { runs.push({ file, args }) },
+    })).toEqual({ available: true, sandbox: { kind: 'bubblewrap', executable: '/usr/bin/bwrap' } })
+    expect(runs[0]).toEqual({ file: '/usr/bin/bwrap', args: ['--ro-bind', '/', '/', '--unshare-all', '--share-net', '/bin/true'] })
+
+    const blocked = probeSandbox({
+      platform: 'linux', exists: have('/usr/bin/bwrap'),
+      run: () => { throw new Error('bwrap: setting up uid map: Permission denied') },
+    })
+    expect(blocked).toMatchObject({ available: false, sandbox: null, whyCode: 'userns_blocked' })
+    expect(blocked.available === false && blocked.why).toMatch(/\.deb/)
   })
 })
 
@@ -70,6 +90,16 @@ describe('the confinement rules', () => {
       PATH: '/Users/op/.nvm/versions/node/v24/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
       HOME: '/data/workspaces/bob', TMPDIR: '/data/bots/bob/tmp', LANG: 'zh_CN.UTF-8', TERM: 'dumb', TZ: 'Asia/Shanghai',
     })
+
+    // AppImage 下就算没给 nodeDir，挂载点也不会混进沙箱的 PATH，LD_LIBRARY_PATH / APPDIR 更不会漏进去
+    const fromAppImage = sandboxEnv(
+      c,
+      { APPDIR: '/tmp/.mount_osb', LD_LIBRARY_PATH: '/tmp/.mount_osb/usr/lib', APPIMAGE: '/x.AppImage' },
+      '/tmp/.mount_osb',
+    )
+    expect(fromAppImage.PATH).toBe('/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
+    expect('LD_LIBRARY_PATH' in fromAppImage).toBe(false)
+    expect('APPDIR' in fromAppImage).toBe(false)
   })
 })
 
