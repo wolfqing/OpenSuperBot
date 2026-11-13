@@ -7,7 +7,7 @@ names.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-12
+## [0.6.0] - 2026-11-13
 
 A desktop app for macOS and Linux (`.dmg`, `.deb`, `.AppImage`), a first-run setup wizard, a settings page and a
 refined workbench UI — so trying OpenSuperBot needs neither Node, pnpm, Docker nor a terminal — plus `@` mentions in

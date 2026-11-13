@@ -15,9 +15,16 @@ describe('smoke-desktop helpers (D5)', () => {
       mkdirSync(join(macBin, '..'), { recursive: true })
       writeFileSync(macBin, '')
       expect(resolvePackagedExecutable({ repoDir: repo, platform: 'darwin', arch: 'arm64' })).toBe(macBin)
-      // 传 .app 目录也能自动找到里面的可执行文件
+      // 传 .app 目录也能自动找到里面的可执行文件；pnpm --filter gateway exec 把 cwd 切进子目录时，相对仓库根写的路径照样能定位
       expect(resolvePackagedExecutable({
         explicit: join(repo, 'desktop', 'release', 'mac-arm64', 'OpenSuperBot.app'),
+        repoDir: repo,
+        platform: 'darwin',
+        arch: 'arm64',
+      })).toBe(macBin)
+      expect(resolvePackagedExecutable({
+        explicit: 'desktop/release/mac-arm64/OpenSuperBot.app',
+        cwd: join(repo, 'gateway'),
         repoDir: repo,
         platform: 'darwin',
         arch: 'arm64',

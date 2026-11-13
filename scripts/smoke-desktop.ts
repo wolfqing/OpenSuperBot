@@ -17,23 +17,24 @@ const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 export function resolvePackagedExecutable(opts: {
   explicit?: string
+  cwd?: string
   repoDir?: string
   platform?: NodeJS.Platform
   arch?: string
 } = {}): string {
   const repoDir = opts.repoDir ?? REPO_DIR
+  const cwd = opts.cwd ?? process.env.INIT_CWD ?? process.cwd()
   const platform = opts.platform ?? process.platform
   const arch = opts.arch ?? process.arch
 
   if (opts.explicit) {
-    const abs = resolve(opts.explicit)
-    const bin = platform === 'darwin' && abs.endsWith('.app')
-      ? join(abs, 'Contents', 'MacOS', 'OpenSuperBot')
-      : abs
-    if (!existsSync(bin) || statSync(bin).isDirectory()) {
-      throw new Error(`Packaged executable not found at ${bin}`)
-    }
-    return bin
+    const toBin = (p: string) =>
+      platform === 'darwin' && p.endsWith('.app') ? join(p, 'Contents', 'MacOS', 'OpenSuperBot') : p
+    const fromCwd = toBin(resolve(cwd, opts.explicit))
+    if (existsSync(fromCwd) && !statSync(fromCwd).isDirectory()) return fromCwd
+    const fromRepo = toBin(resolve(repoDir, opts.explicit))
+    if (existsSync(fromRepo) && !statSync(fromRepo).isDirectory()) return fromRepo
+    throw new Error(`Packaged executable not found at ${fromCwd}`)
   }
 
   const candidates = platform === 'darwin'

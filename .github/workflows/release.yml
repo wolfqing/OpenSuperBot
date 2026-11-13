@@ -42,7 +42,7 @@ jobs:
       - name: Match tag against desktop/package.json
         if: github.ref_type == 'tag'
         run: |
-          VERSION="v$(node -p "require('./desktop/package.json').version")"
+          VERSION="v$(node --input-type=commonjs -p "require('./desktop/package.json').version")"
           if [ "$GITHUB_REF_NAME" != "$VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match desktop/package.json ($VERSION)"
             exit 1
@@ -96,7 +96,7 @@ jobs:
           merge-multiple: true
       - name: Verify all six installers and write SHA256SUMS.txt
         run: |
-          VERSION="$(node -p "require('./desktop/package.json').version")"
+          VERSION="$(node --input-type=commonjs -p "require('./desktop/package.json').version")"
           cd dist
           EXPECTED=(
             "OpenSuperBot-${VERSION}-mac-arm64.dmg"
