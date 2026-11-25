@@ -27,13 +27,13 @@
     "smoke:local": "tsx scripts/smoke-local.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.8.0",
-    "@hono/node-server": "^2.1.8",
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@hono/node-server": "^2.1.11",
     "@novnc/novnc": "1.7.0",
     "better-sqlite3": "^13.2.0",
     "croner": "^11.0.1",
     "dockerode": "^5.0.1",
-    "hono": "^4.13.18",
+    "hono": "^4.13.19",
     "playwright-core": "^1.65.1",
     "unpdf": "^1.9.1",
     "ws": "^8.23.0"
@@ -45,6 +45,6 @@
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
