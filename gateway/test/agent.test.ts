@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runTurn, type AgentEvents } from '../src/agent.js'
+import { createFakeComputer } from '../src/computer.js'
 import { ensureDmThread, listMessages, openDb, upsertBot, type MessageRow } from '../src/db.js'
 import type { AssistantTurn, ChatMsg, LLM } from '../src/llm.js'
 
@@ -70,6 +71,125 @@ describe('runTurn', () => {
     await runTurn({ db, llm: scriptedLLM([textTurn]), bot, soul: '', threadId }, 'hi', events)
     expect(messages.map((m) => m.kind)).toEqual(['text', 'text'])
     expect(messages[1]!.content).toBe('Done for today.')
+  })
+
+  it('redacts repeated-call argument previews before replaying the reminder', async () => {
+    const { db, threadId } = setup()
+    const privateValue = 'private-repeat-123'
+    const repeatedCalls: AssistantTurn[] = Array.from({ length: 5 }, (_, index) => ({
+      content: null,
+      toolCalls: [{ id: `repeat-${index}`, name: 'browser_click', args: { target: privateValue } }],
+      raw: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: `repeat-${index}`,
+          type: 'function',
+          function: { name: 'browser_click', arguments: JSON.stringify({ target: privateValue }) },
+        }],
+      },
+    }))
+    const llm = scriptedLLM([
+      ...repeatedCalls,
+      { content: 'I stopped repeating the click.', toolCalls: [], raw: { role: 'assistant', content: 'I stopped repeating the click.' } },
+    ])
+    const { events } = collector()
+    const computer = createFakeComputer()
+
+    await runTurn({
+      db,
+      llm,
+      bot,
+      soul: '',
+      threadId,
+      getComputer: async () => computer,
+      redactOutput: (value) => value.replaceAll(privateValue, '[private workflow value]'),
+    }, 'try the action', events)
+
+    const sixthRequest = JSON.stringify(llm.calls[5])
+    const detailedReminder = llm.calls[5]!.find((message) => message.role === 'user' && message.content?.includes('Repeated tool call detected'))
+    expect(sixthRequest).not.toContain(privateValue)
+    expect(detailedReminder?.content).toContain('{"target":"[private workflow value]"}')
+  })
+
+  it('drops native replay blocks when numeric private arguments are present', async () => {
+    const { db, threadId } = setup()
+    const privateValue = '731904'
+    const rawCall: AssistantTurn = {
+      content: null,
+      toolCalls: [{ id: 'native-call', name: 'browser_click', args: { target: 'Open details' } }],
+      raw: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'native-call',
+          type: 'function',
+          function: { name: 'browser_click', arguments: '{"target":"Open details"}' },
+        }],
+        native: {
+          api: 'anthropic',
+          route: 'test-model',
+          items: [{ type: 'tool_use', id: 'native-call', name: 'browser_click', input: { text: Number(privateValue) } }],
+        },
+      },
+    }
+    const llm = scriptedLLM([
+      rawCall,
+      { content: 'The details are open.', toolCalls: [], raw: { role: 'assistant', content: 'The details are open.' } },
+    ])
+    const { events } = collector()
+    const computer = createFakeComputer()
+    await runTurn({
+      db,
+      llm,
+      bot,
+      soul: '',
+      threadId,
+      getComputer: async () => computer,
+      redactOutput: (value) => value.replaceAll(privateValue, '[private workflow value]'),
+    }, 'open details', events)
+
+    const replayed = llm.calls[1]!.find((message) => message.role === 'assistant' && message.tool_calls?.length)
+    expect(JSON.stringify(llm.calls[1])).not.toContain(privateValue)
+    expect(replayed).not.toHaveProperty('native')
+  })
+
+  it('redacts the model summary attached to a step-limit notice', async () => {
+    const { db, threadId } = setup()
+    const privateValue = 'private-summary-9281'
+    const repeatedToolTurn: AssistantTurn = {
+      content: null,
+      toolCalls: [{ id: 'one-step', name: 'browser_click', args: { target: 'Open details' } }],
+      raw: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: 'one-step', type: 'function', function: { name: 'browser_click', arguments: '{"target":"Open details"}' } }],
+      },
+    }
+    const summary: AssistantTurn = {
+      content: `I finished checking ${privateValue}.`,
+      toolCalls: [],
+      raw: { role: 'assistant', content: `I finished checking ${privateValue}.` },
+    }
+    const llm = scriptedLLM([repeatedToolTurn, summary])
+    const { events } = collector()
+    const computer = createFakeComputer()
+
+    await runTurn({
+      db,
+      llm,
+      bot,
+      soul: '',
+      threadId,
+      maxSteps: 1,
+      getComputer: async () => computer,
+      redactOutput: (value) => value.replaceAll(privateValue, '[private workflow value]'),
+    }, 'open details', events)
+
+    const paused = listMessages(db, threadId).find((message) => message.kind === 'text' && message.payload !== null)
+    expect(paused?.content).toContain('[private workflow value]')
+    expect(JSON.stringify(paused?.payload)).toContain('[private workflow value]')
+    expect(JSON.stringify(paused)).not.toContain(privateValue)
   })
 
   it('feeds validation error back to model on bad payload, model retries', async () => {

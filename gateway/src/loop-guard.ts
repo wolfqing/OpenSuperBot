@@ -51,7 +51,7 @@ function detailedReminder(toolName: string, count: number, preview: string): str
 
 export type RepeatGuard = {
   /** 记录一次工具调用；达到提醒阈值时返回给模型的提醒文本，否则返回 null。 */
-  observe(toolName: string, args: unknown): string | null
+  observe(toolName: string, args: unknown, previewArgs?: unknown): string | null
   /** 重置连续计数（例如外部上下文变化时）。 */
   reset(): void
 }
@@ -68,7 +68,7 @@ export function createRepeatGuard(opts: {
   let count = 0
 
   return {
-    observe(toolName, args) {
+    observe(toolName, args, previewArgs) {
       if (!thresholds.length) return null
       const canonical = canonicalizeArgs(args)
       const key = JSON.stringify([toolName, canonical])
@@ -81,7 +81,7 @@ export function createRepeatGuard(opts: {
       if (!thresholdSet.has(count)) return null
       return count === thresholds[0]
         ? GENTLE_REMINDER
-        : detailedReminder(toolName, count, previewArguments(canonical, previewChars))
+        : detailedReminder(toolName, count, previewArguments(canonicalizeArgs(previewArgs === undefined ? args : previewArgs), previewChars))
     },
     reset() {
       lastKey = null

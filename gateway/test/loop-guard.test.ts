@@ -55,4 +55,15 @@ describe('createRepeatGuard', () => {
     expect(detailed).toMatch(/… \(\+\d+ more chars\)/)
     expect(detailed.length).toBeLessThan(400)
   })
+
+  it('keeps the raw call identity while previewing only redacted arguments', () => {
+    const guard = createRepeatGuard({ thresholds: [2, 3] })
+    const args = { target: 'private-workflow-value' }
+    const preview = { target: '[private workflow value]' }
+    expect(guard.observe('browser_click', args, preview)).toBeNull()
+    expect(guard.observe('browser_click', args, preview)).toContain('repeating')
+    const detailed = guard.observe('browser_click', args, preview)!
+    expect(detailed).toContain('{"target":"[private workflow value]"}')
+    expect(detailed).not.toContain('private-workflow-value')
+  })
 })

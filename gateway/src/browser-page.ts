@@ -290,7 +290,10 @@ function sanitizeSecretError(err: unknown, secret: string): string {
 }
 
 /** BotComputer 里和浏览器有关的那些方法，全部建立在「给我当前页面」之上。 */
-export function pageOperations(page: () => Promise<PageLike>): PageOperations {
+export function pageOperations(
+  page: () => Promise<PageLike>,
+  beforeAction?: (page: PageLike) => void | Promise<void>,
+): PageOperations {
   return {
     async goto(url) {
       const safe = checkBrowserUrl(url, { allowData: true })
@@ -314,40 +317,57 @@ export function pageOperations(page: () => Promise<PageLike>): PageOperations {
     async click(target) {
       const p = await page()
       // bot 更常说「点 Sign in」而不是 CSS：两种都试，顺序按目标长得像什么来定
-      const bySelector = () => p.click(target, { timeout: 5_000 })
+      const bySelector = async () => {
+        await beforeAction?.(p)
+        await p.click(target, { timeout: 5_000 })
+      }
       const byText = async () => {
         if (!p.getByText) throw new Error(`no element matches ${target}`)
         const first = p.getByText(target).first()
         if (!first.click) throw new Error(`no element matches ${target}`)
+        await beforeAction?.(p)
         await first.click({ timeout: 5_000 })
       }
       await firstThatWorks(looksLikeSelector(target) ? [bySelector, byText] : [byText, bySelector])
       await p.waitForLoadState?.('domcontentloaded', { timeout: 5_000 }).catch(() => {})
-      const now = await page()
-      return { clicked: target, url: now.url(), title: await now.title() }
+      let now: PageLike | null = null
+      try { now = await page() } catch { /* The click may close its page; action completion is still useful. */ }
+      let url: string | undefined
+      let title: string | undefined
+      if (now) {
+        try { url = now.url() } catch { /* Post-click metadata is best-effort. */ }
+        try { title = await now.title() } catch { /* Post-click metadata is best-effort. */ }
+      }
+      return { clicked: target, ...(url ? { url } : {}), ...(title ? { title } : {}) }
     },
     async type(target, text, submit) {
       const p = await page()
       const bySelector = async () => {
         if (!p.fill) throw new Error('this browser cannot fill fields')
+        await beforeAction?.(p)
         await p.fill(target, text, { timeout: 3_000 })
       }
       const byLabel = async () => {
         if (!p.getByLabel) throw new Error(`no field labelled ${target}`)
         const first = p.getByLabel(target).first()
         if (!first.fill) throw new Error(`no field labelled ${target}`)
+        await beforeAction?.(p)
         await first.fill(text, { timeout: 3_000 })
       }
       const byPlaceholder = async () => {
         if (!p.getByPlaceholder) throw new Error(`no field with placeholder ${target}`)
         const first = p.getByPlaceholder(target).first()
         if (!first.fill) throw new Error(`no field with placeholder ${target}`)
+        await beforeAction?.(p)
         await first.fill(text, { timeout: 3_000 })
       }
       await firstThatWorks(looksLikeSelector(target)
         ? [bySelector, byLabel, byPlaceholder]
         : [byLabel, byPlaceholder, bySelector])
-      if (submit) await (p.keyboard ?? missing('keyboard')).press('Enter')
+      if (submit) {
+        await beforeAction?.(p)
+        await (p.keyboard ?? missing('keyboard')).press('Enter')
+      }
     },
     async fillSecret(target, secretValue, opts) {
       const p = await page()
@@ -421,7 +441,9 @@ export function pageOperations(page: () => Promise<PageLike>): PageOperations {
       return { origin: actualOrigin }
     },
     async press(key) {
-      await ((await page()).keyboard ?? missing('keyboard')).press(key)
+      const p = await page()
+      await beforeAction?.(p)
+      await (p.keyboard ?? missing('keyboard')).press(key)
     },
     async scroll(direction) {
       await ((await page()).mouse ?? missing('mouse')).wheel(0, direction === 'down' ? 700 : -700)

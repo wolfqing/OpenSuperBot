@@ -156,7 +156,12 @@ async function firstVisibleTarget(page: PageLike, target: WorkflowTarget, signal
     } catch (error) {
       if (error instanceof RunnerError) throw error
       if (signal?.aborted) throw new RunnerError('cancelled')
-      // Visibility checks have no action side effects, so trying the next recorded strategy is safe.
+      if (pageIsClosed(page)) throw new RunnerError('browser_unavailable')
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        // A locator timeout means this recorded target is absent; trying the next strategy is safe.
+        continue
+      }
+      throw new RunnerError('action_failed')
     }
   }
   throw new RunnerError(hasLocator ? 'target_not_found' : 'unsupported_browser')
@@ -239,20 +244,17 @@ function createWorkflowPageGuard(getPageFromSession: () => Promise<PageLike>): W
   return {
     async getPage() {
       if (popup) throw new RunnerError('popup_opened')
+      if (currentPage && pageIsClosed(currentPage)) throw new RunnerError('browser_unavailable')
       const nextPage = await getPageFromSession().catch(() => { throw new RunnerError('browser_unavailable') })
       if (currentPage && nextPage !== currentPage) {
-        if (!pageIsClosed(currentPage)) {
-          rejectPopup(nextPage)
-          throw new RunnerError('popup_opened')
-        }
-        detach()
-        currentPage = nextPage
-        attach(nextPage)
+        rejectPopup(nextPage)
+        throw new RunnerError('popup_opened')
       } else if (!currentPage) {
         currentPage = nextPage
         attach(nextPage)
       }
 
+      if (currentPage && pageIsClosed(currentPage)) throw new RunnerError('browser_unavailable')
       if (popup) throw new RunnerError('popup_opened')
       const unexpectedPages = currentContext?.pages?.().filter((page) => !baselinePages.has(page) && !pageIsClosed(currentPage!)) ?? []
       if (unexpectedPages.length > 0) {
@@ -423,7 +425,7 @@ export async function runWorkflow(trace: WorkflowTrace, options: {
         // Attach popup tracking before asking for approval, and keep it until this run exits.
         await pageGuard.getPage()
       } catch (error) {
-        const code = error instanceof RunnerError ? error.code : 'action_failed'
+        const code = pageGuard.popupOpened() ? 'popup_opened' : error instanceof RunnerError ? error.code : 'action_failed'
         await reportStep(options.onStep, { index: index + 1, type: step.type, ok: false, durationMs: Date.now() - started })
         return { status: 'failed', step: index + 1, code, stepsCompleted }
       }
@@ -444,7 +446,7 @@ export async function runWorkflow(trace: WorkflowTrace, options: {
         await reportStep(options.onStep, { index: index + 1, type: step.type, ok: true, durationMs: Date.now() - started })
         stepsCompleted++
       } catch (error) {
-        const code = error instanceof RunnerError ? error.code : 'action_failed'
+        const code = pageGuard.popupOpened() ? 'popup_opened' : error instanceof RunnerError ? error.code : 'action_failed'
         await reportStep(options.onStep, { index: index + 1, type: step.type, ok: false, durationMs: Date.now() - started })
         return { status: 'failed', step: index + 1, code, stepsCompleted }
       }

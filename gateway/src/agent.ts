@@ -126,6 +126,8 @@ export type AgentDeps = {
   getComputer?: () => Promise<BotComputer>
   /** 电脑是什么做的、有没有命令行；不传 = 容器电脑，有 shell */
   computer?: { kind?: 'docker' | 'local'; shell?: boolean }
+  browserOnly?: boolean
+  redactOutput?: (value: string) => string
   saveShot?: (botId: string, shot: Shot) => Promise<{ url: string; width: number; height: number }>
   memory?: string
   /** AGENTS.md：操作手册（硬边界在这里） */
@@ -145,6 +147,7 @@ export type AgentDeps = {
     frozen: FrozenComputerGuardrailExecution
     editable: ApprovalEditable
   }) => Promise<{ approvalId: number }>
+  stopAfterGuardrailApproval?: () => boolean
   /** false = 关闭高危动作确定性护栏（仅底层沙箱单元测试用；默认开启） */
   actionGuardrail?: boolean
   onSaveMemory?: (rule: string) => Promise<{ rule: string; diff: string; total: number }>
@@ -216,6 +219,8 @@ export type AgentDeps = {
   priority?: LlmPriority
   /** 回合起点已带入外部不受信任载荷（如 MCP 写操作返回正文）：本回合直接标记 outside-data */
   tainted?: boolean
+  /** `false` additionally blocks standing rules without changing the caller's turn origin. */
+  allowStandingRules?: boolean
   /** 本回合已带入或读到外部不受信任数据时通知调用方（如群聊轮次将 speaker 的 taint 传给 Chief） */
   onTainted?: () => void
   /** 操作者发来的文件：传进历史里的附件消息，回一份怎么给模型看的说明。不传 = 只报文件名 */
@@ -457,7 +462,7 @@ export async function runTurn(
       && effectiveMode === 'act'
     const timeZone = deps.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
     const hasSkills = Boolean(deps.skills?.length && deps.onReadSkill)
-    const tools = buildTools({
+    const builtTools = buildTools({
       hasComputer,
       hasWiki,
       canRelay,
@@ -484,6 +489,9 @@ export async function runTurn(
       hasEditableSpaces: Boolean(deps.spaces?.some((s) => s.role === 'editor') && deps.onSpaceUpsertItem),
       hasWebResearch: Boolean(deps.onWebSearch || deps.onWebFetch),
     })
+    const tools = deps.browserOnly
+      ? builtTools.filter((tool) => BROWSER_HANDOFF_TOOL_NAMES.has(tool.function.name))
+      : builtTools
     const systemMessage: ChatMsg = {
       role: 'system',
       content: buildSystemPrompt(bot, soul, {
@@ -600,10 +608,12 @@ export async function runTurn(
       (m) => m.kind === 'webhook' || (m.kind === 'bot_ref' && (m.payload as { tainted?: unknown } | null)?.tainted === true),
     )
     let taintedByOutsideData = deps.tainted === true || deps.origin === 'webhook'
-    const computeRuleBlock = (): RuleBlock | null =>
-      deps.origin !== 'operator'
+    const computeRuleBlock = (): RuleBlock | null => {
+      const block = deps.origin !== 'operator'
         ? (deps.origin ?? 'unknown')
         : (hasOutsideDataHistory || taintedByOutsideData) ? 'outside-data' : null
+      return block ?? (deps.allowStandingRules === false ? 'outside-data' : null)
+    }
     const initiallyTainted = hasOutsideDataHistory || taintedByOutsideData
     const activeTools = [...tools]
     const activeMcpReadToolNames = new Set(deps.mcpReadToolNames ?? [])
@@ -638,6 +648,9 @@ export async function runTurn(
     if (initiallyTainted) notifyTainted()
     let imagesSeen = false
     const repeatGuard = createRepeatGuard()
+    const repeatPreviewArgs = (call: ToolCall) => deps.redactOutput
+      ? redactAgentValue(call.args, deps.redactOutput)
+      : call.args
     const meter = createContextMeter()
     let prefixModified = false
     let emptyRetries = 0
@@ -748,7 +761,7 @@ export async function runTurn(
       if (signal?.aborted) return stopped(notify, silentStop)
       if (turn.toolCalls.length > 0) {
         emptyRetries = 0
-        messages.push(turn.raw)
+        messages.push(deps.redactOutput ? redactToolCallMessage(turn.raw, deps.redactOutput) : turn.raw)
         let latestImage: string | undefined
         const reminders: string[] = []
         const isParallelSafe = (call: ToolCall): boolean =>
@@ -784,7 +797,7 @@ export async function runTurn(
               }
               messages.push({ role: 'tool', tool_call_id: entry.call.id, content: entry.outcome.text })
               latestImage = entry.outcome.image ?? latestImage
-              const nudge = repeatGuard.observe(entry.call.name, entry.call.args)
+              const nudge = repeatGuard.observe(entry.call.name, entry.call.args, repeatPreviewArgs(entry.call))
               if (nudge) reminders.push(nudge)
             }
           } else {
@@ -798,8 +811,9 @@ export async function runTurn(
               })
               messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.text })
               latestImage = outcome.image ?? latestImage
-              const nudge = repeatGuard.observe(call.name, call.args)
+              const nudge = repeatGuard.observe(call.name, call.args, repeatPreviewArgs(call))
               if (nudge) reminders.push(nudge)
+              if (deps.stopAfterGuardrailApproval?.()) return 'stopped'
             }
           }
         }
@@ -822,29 +836,31 @@ export async function runTurn(
         (effectiveMode === 'watch' && Boolean(text && WATCH_QUIET.test(text))) ||
         (effectiveMode === 'prepare' && Boolean(text && PREPARE_QUIET.test(text)))
       if (text && !silent) {
-        deps.onFinalText?.(text)
+        const safeText = deps.redactOutput?.(text) ?? text
+        deps.onFinalText?.(safeText)
         if (deps.quietBuffer && deps.onQuietBuffer && !turnBypassedPacing) {
-          await deps.onQuietBuffer({ kind: 'text', summary: text, payload: { text } })
+          await deps.onQuietBuffer({ kind: 'text', summary: safeText, payload: { text: safeText } })
         } else if (deps.interceptProactiveOutput && !turnBypassedPacing) {
           const res = await deps.interceptProactiveOutput({
             kind: 'text',
-            summary: text,
-            payload: { text },
+            summary: safeText,
+            payload: { text: safeText },
             tainted: Boolean(ctx.turnTainted),
           })
           if (!res.intercepted) {
-            say(text)
+            say(safeText)
           }
         } else {
-          say(text)
+          say(safeText)
         }
       }
-      if (text) deps.onTurnTextReply?.(text)
+      if (text) deps.onTurnTextReply?.(deps.redactOutput?.(text) ?? text)
       return 'replied'
     }
   } catch (err) {
     if (signal?.aborted) return stopped(notify, deps.isBackgroundTask || deps.isPipelineStep)
-    notify({ notice: 'error', params: { name: bot.name, detail: err instanceof Error ? err.message : String(err) } })
+    const detail = err instanceof Error ? err.message : String(err)
+    notify({ notice: 'error', params: { name: bot.name, detail: deps.redactOutput?.(detail) ?? detail } })
     return 'error'
   } finally {
     activity.close()
@@ -903,7 +919,8 @@ async function closeOut(
     if (turn.usage) deps.onUsage?.(turn.usage)
     if (deps.signal?.aborted) return stopped(notify, deps.isBackgroundTask || deps.isPipelineStep)
     const text = turn.content?.trim()
-    notify({ notice: 'paused', params: limit, ...(text ? { lead: text } : {}) })
+    const safeText = text ? deps.redactOutput?.(text) ?? text : undefined
+    notify({ notice: 'paused', params: limit, ...(safeText ? { lead: safeText } : {}) })
   } catch {
     if (deps.signal?.aborted) return stopped(notify, deps.isBackgroundTask || deps.isPipelineStep)
     notify({ notice: 'paused', params: limit })
@@ -979,6 +996,10 @@ const COMPUTER_TOOL_NAMES = new Set([
   'browser_press', 'browser_scroll', 'browser_back', 'browser_screenshot', 'ask_for_login',
 ])
 
+const BROWSER_HANDOFF_TOOL_NAMES = new Set([
+  'browser_goto', 'browser_extract', 'browser_click', 'browser_type', 'browser_press', 'browser_scroll', 'browser_back',
+])
+
 /** 请人接管不是「电脑上的一步」，它有自己的卡片 */
 const ACTIVITY_TOOL_NAMES = new Set([...COMPUTER_TOOL_NAMES].filter((name) => name !== 'ask_for_login'))
 
@@ -995,6 +1016,75 @@ const WORKFLOW_TOOL_NAMES = new Set([
 const MAX_OPTIONS = 6
 const MAX_OPTION_CHARS = 80
 
+function redactAgentValue(value: unknown, redact: (value: string) => string): unknown {
+  if (typeof value === 'string') return redact(value)
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value)
+    const safeText = redact(text)
+    return safeText === text ? value : safeText
+  }
+  if (Array.isArray(value)) return value.map((item) => redactAgentValue(item, redact))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), redactAgentValue(item, redact)]))
+  }
+  return value
+}
+
+function containsRedactableNativeText(value: unknown, redact: (value: string) => string): boolean {
+  if (typeof value === 'string') {
+    if (redact(value) !== value) return true
+    try {
+      const parsed = JSON.parse(value) as unknown
+      return parsed !== value && containsRedactableNativeText(parsed, redact)
+    } catch {
+      return false
+    }
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return redact(String(value)) !== String(value)
+  if (Array.isArray(value)) return value.some((item) => containsRedactableNativeText(item, redact))
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, item]) => redact(key) !== key || containsRedactableNativeText(item, redact))
+  }
+  return false
+}
+
+function redactToolCallMessage(message: ChatMsg, redact: (value: string) => string): ChatMsg {
+  const { native, ...plainMessage } = message
+  const safe: ChatMsg = {
+    ...plainMessage,
+    ...(typeof message.content === 'string' ? { content: redact(message.content) } : {}),
+  }
+  if (Array.isArray(message.tool_calls)) {
+    safe.tool_calls = message.tool_calls.map((toolCall) => {
+      if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) return toolCall
+      const call = toolCall as Record<string, unknown>
+      const fn = call.function
+      if (!fn || typeof fn !== 'object' || Array.isArray(fn)) return toolCall
+      const functionData = fn as Record<string, unknown>
+      const rawArguments = functionData.arguments
+      let safeArguments = rawArguments
+      if (typeof rawArguments === 'string') {
+        try {
+          const parsed = JSON.parse(rawArguments) as unknown
+          const redacted = redactAgentValue(parsed, redact)
+          const compact = JSON.stringify(redacted)
+          safeArguments = compact === JSON.stringify(parsed) ? rawArguments : compact
+        } catch {
+          // Invalid tool JSON cannot be safely parsed for value-level redaction.
+          safeArguments = '{}'
+        }
+      } else if (rawArguments !== undefined) {
+        safeArguments = redactAgentValue(rawArguments, redact)
+      }
+      return { ...call, function: { ...functionData, arguments: safeArguments } }
+    })
+  }
+  // Keep opaque native signatures unchanged. If native content includes a private value,
+  // omit it and let the adapter rebuild from the safe content and tool calls above.
+  if (native && !containsRedactableNativeText(native, redact)) safe.native = native
+  return safe
+}
+
 async function execToolCall(
   deps: TurnContext,
   call: ToolCall,
@@ -1003,11 +1093,16 @@ async function execToolCall(
   onOutsideDataRead?: () => void,
 ): Promise<ToolOutcome> {
   const args = (call.args ?? {}) as Record<string, unknown>
+  const redactOutput = deps.redactOutput ?? ((value: string) => value)
+  const safeArgs = deps.redactOutput ? redactAgentValue(args, redactOutput) as Record<string, unknown> : args
+  if (deps.browserOnly && !BROWSER_HANDOFF_TOOL_NAMES.has(call.name)) {
+    return { text: `${call.name} is unavailable during workflow browser handoff.` }
+  }
   const started = Date.now()
   const log = (ok: boolean, extra?: string | { summary?: string; goalId?: string }) => {
     const summaryOverride = typeof extra === 'string' ? extra : extra?.summary
     const goalId = typeof extra === 'string' ? undefined : extra?.goalId
-    const finalSummary = summaryOverride || summarize(call.name, args)
+    const finalSummary = redactOutput(summaryOverride || summarize(call.name, safeArgs))
     const ms = Date.now() - started
     deps.onAction?.({ tool: call.name, summary: finalSummary, ok, ms, ...(goalId ? { goalId } : {}) })
     deps.onStepProgress?.({ tool: call.name, summary: finalSummary, ok, ms })
@@ -1015,11 +1110,11 @@ async function execToolCall(
   const failed = (err: unknown): ToolOutcome => {
     log(false)
     // 工具失败必须回喂模型（让它换招/如实汇报），而不是炸掉整个回合
-    return { text: `Tool ${call.name} failed: ${err instanceof Error ? err.message : String(err)}` }
+    return { text: redactOutput(`Tool ${call.name} failed: ${err instanceof Error ? err.message : String(err)}`) }
   }
   if (call.argsError) {
     log(false)
-    return { text: `Invalid JSON arguments for ${call.name}: ${call.argsError}. Fix the JSON object and try again.` }
+    return { text: redactOutput(`Invalid JSON arguments for ${call.name}: ${call.argsError}. Fix the JSON object and try again.`) }
   }
   // 没在清单里给它的工具，模型硬要调也不行：清单是给模型看的，这里才是门
   if (deps.effectiveMode === 'watch' && !WATCH_TOOL_NAMES.has(call.name) && !deps.activeMcpReadToolNames.has(call.name)) {
@@ -1208,7 +1303,7 @@ async function execToolCall(
       log(false)
       return { text: 'Public web research is not available on this gateway.' }
     }
-    const step = activity.start(call.name, summarize(call.name, args))
+    const step = activity.start(call.name, redactOutput(summarize(call.name, safeArgs)))
     try {
       const res = await handler(args)
       // 任何来自公网的内容都属于不可信外部数据，强制污染本回合（禁自动放行规则）
@@ -1374,7 +1469,7 @@ async function execToolCall(
       log(false)
       return { text: 'Vault is not available on this gateway.' }
     }
-    const step = activity.start(call.name, summarize(call.name, args))
+    const step = activity.start(call.name, redactOutput(summarize(call.name, safeArgs)))
     try {
       const res = await deps.onVaultFill({ args, ruleBlock: deps.ruleBlock, events })
       if (res.usedItemId) deps.usedVaultItemIds.add(res.usedItemId)
@@ -1398,7 +1493,7 @@ async function execToolCall(
       log(false)
       return { text: 'Team wiki is not available on this gateway.' }
     }
-    const step = activity.start(call.name, summarize(call.name, args))
+    const step = activity.start(call.name, redactOutput(summarize(call.name, safeArgs)))
     try {
       const res = await deps.onWikiTool({ name: call.name, args, turnTainted: deps.turnTainted })
       if (res.tainted) onOutsideDataRead?.()
@@ -1451,7 +1546,7 @@ async function execToolCall(
           expectedOrigin = undefined
         }
       }
-      const step = ACTIVITY_TOOL_NAMES.has(call.name) ? activity.start(call.name, summarize(call.name, args)) : null
+      const step = ACTIVITY_TOOL_NAMES.has(call.name) ? activity.start(call.name, redactOutput(summarize(call.name, safeArgs))) : null
       if (call.name !== 'shell' && !expectedOrigin) {
         if (step) activity.finish(step, false, Date.now() - started)
         log(false, 'blocked: missing page origin')
@@ -1485,19 +1580,19 @@ async function execToolCall(
             kind: 'approval_request',
             payload: {
               approvalId: held.approvalId,
-              action: guardrailRes.action,
-              detail: guardrailRes.detail,
+              action: redactOutput(guardrailRes.action),
+              detail: redactOutput(guardrailRes.detail),
               kind: guardrailRes.approvalKind,
-              target: guardrailRes.target,
+              target: redactOutput(guardrailRes.target),
               status: 'pending',
               canRemember: false,
               rememberBlocked: blockText(reason),
               rememberReason: reason,
-              editable,
+              ...(!deps.browserOnly ? { editable } : {}),
             },
           }),
         )
-        const heldSummary = `held for approval: ${summarize(call.name, args)}`.slice(0, 140)
+        const heldSummary = redactOutput(`held for approval: ${summarize(call.name, safeArgs)}`).slice(0, 140)
         if (step) {
           step.summary = heldSummary
           activity.finish(step, true, Date.now() - started)
@@ -1513,9 +1608,10 @@ async function execToolCall(
     }
   }
   if (BROWSER_OUTSIDE_DATA_TOOL_NAMES.has(call.name)) onOutsideDataRead?.()
-  const step = ACTIVITY_TOOL_NAMES.has(call.name) ? activity.start(call.name, summarize(call.name, args)) : null
+  const step = ACTIVITY_TOOL_NAMES.has(call.name) ? activity.start(call.name, redactOutput(summarize(call.name, safeArgs))) : null
   try {
     const outcome = await execComputerTool(deps, call.name, args, events)
+    if (outcome.text) outcome.text = redactOutput(outcome.text)
     if (deps.redactVaultText && deps.usedVaultItemIds.size > 0 && outcome.text) {
       outcome.text = deps.redactVaultText([...deps.usedVaultItemIds], outcome.text)
     }
@@ -1942,9 +2038,10 @@ async function execWorkflowTool(
       return "Held for your operator's approval. Stop here — do not perform it."
     }
     case 'ask_operator': {
-      const question = String(args.question ?? '').trim()
+      const redactOutput = deps.redactOutput ?? ((value: string) => value)
+      const question = redactOutput(String(args.question ?? '')).trim()
       const raw = Array.isArray(args.options) ? args.options : []
-      const options = [...new Set(raw.map((o) => String(o ?? '').trim().slice(0, MAX_OPTION_CHARS)).filter(Boolean))]
+      const options = [...new Set(raw.map((o) => redactOutput(String(o ?? '')).trim().slice(0, MAX_OPTION_CHARS)).filter(Boolean))]
       if (!question) return 'ask_operator needs a one-line "question".'
       if (options.length < 2 || options.length > MAX_OPTIONS) {
         return `ask_operator needs 2 to ${MAX_OPTIONS} distinct options; for an open question, just ask in plain text.`

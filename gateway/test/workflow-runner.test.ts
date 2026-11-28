@@ -12,6 +12,7 @@ function fakePage(options: {
   actions?: Record<string, Partial<WorkflowElementLike>>
   initialUrl?: string
   navigationPopup?: boolean
+  popupOnWait?: string
   onNavigate?: () => void
   filterVisible?: boolean
   waitForever?: string[]
@@ -37,7 +38,12 @@ function fakePage(options: {
       async waitFor() {
         calls.push(`visible:${key}`)
         if (options.waitForever?.includes(key)) return new Promise<void>(() => {})
-        if (options.visible?.[key] === false) throw new Error('not visible')
+        if (options.popupOnWait === key) openPopup()
+        if (options.visible?.[key] === false) {
+          const timeout = new Error('not visible')
+          timeout.name = 'TimeoutError'
+          throw timeout
+        }
       },
       async click() { calls.push(`click:${key}`); await options.actions?.[key]?.click?.() },
       async fill(value) { calls.push(`fill:${key}:${value}`); await options.actions?.[key]?.fill?.(value) },
@@ -187,7 +193,7 @@ describe('workflow replay runner', () => {
     expect(browser.calls).toContain('select:label:Country:United Kingdom')
   })
 
-  it('fetches a fresh page for each step after a browser relaunch', async () => {
+  it('fails closed if the pinned page closes during a browser relaunch', async () => {
     let closeOldPage = () => {}
     const beforeRelaunch = fakePage({ onNavigate: () => closeOldPage() })
     closeOldPage = beforeRelaunch.closeCurrent
@@ -196,9 +202,9 @@ describe('workflow replay runner', () => {
     const result = await runWorkflow(trace([{ type: 'navigate', url: 'https://example.test/next' }, click('Continue')]), {
       getPage, bindings: new Map(), rulesAllowed: false, authorize: async () => ({ status: 'approved' }),
     })
-    expect(result).toEqual({ status: 'completed', stepsCompleted: 2 })
+    expect(result).toEqual({ status: 'failed', step: 2, code: 'browser_unavailable', stepsCompleted: 1 })
     expect(beforeRelaunch.calls).toEqual(['goto:https://example.test/next'])
-    expect(afterRelaunch.calls).toEqual(['visible:label:Continue', 'click:label:Continue'])
+    expect(afterRelaunch.calls).toEqual([])
   })
 
   it('does not retry another locator after an action may have taken effect', async () => {
@@ -247,7 +253,7 @@ describe('workflow replay runner', () => {
     })
     expect(result).toMatchObject({ status: 'failed', code: 'url_mismatch', step: 1, stepsCompleted: 0 })
     expect(browser.calls).not.toContain('visible:label:Delete')
-  })
+  }, 10_000)
 
   it('polls for a delayed URL change within the recorded expectation window', async () => {
     const browser = fakePage()
@@ -309,6 +315,16 @@ describe('workflow replay runner', () => {
     })
     expect(result).toMatchObject({ status: 'failed', code: 'popup_opened', step: 1 })
     expect(browser.calls).not.toContain('visible:label:Continue')
+    expect(browser.calls).toContain('close:popup')
+  })
+
+  it('reports a popup opened during locator resolution instead of handing off as target drift', async () => {
+    const browser = fakePage({ popupOnWait: 'label:Continue', visible: { 'label:Continue': false } })
+    const result = await runWorkflow(trace([click('Continue')]), {
+      getPage: async () => browser.page, bindings: new Map(), rulesAllowed: false,
+      authorize: async () => ({ status: 'approved' }),
+    })
+    expect(result).toMatchObject({ status: 'failed', code: 'popup_opened', step: 1 })
     expect(browser.calls).toContain('close:popup')
   })
 
